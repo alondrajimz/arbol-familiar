@@ -34,14 +34,21 @@ function genId(){return Date.now().toString(36)+Math.random().toString(36).slice
 function loadData(){try{const d=localStorage.getItem(STORAGE_KEY);if(d){const p=JSON.parse(d);if(Array.isArray(p)&&p.length>0)return p;}}catch(e){}return null;}
 function saveData(data){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(e){}}
 
-function Av({photo,name,size=44,gender}){
+function fmtDate(d){
+  if(!d)return"";
+  if(/^\d{4}-\d{2}-\d{2}$/.test(d)){const[y,mo,day]=d.split("-");return`${day}/${mo}/${y}`;}
+  return d;
+}
+
+function Av({photo,name,size=44,gender,deceased}){
   const ini=(name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
   const g=gender==="F"?"linear-gradient(135deg,#FF2D55,#FF6482)":"linear-gradient(135deg,#007AFF,#5AC8FA)";
   return <div style={{width:size,height:size,borderRadius:size/2,flexShrink:0,
     background:photo?`url(${photo}) center/cover no-repeat`:g,
     display:"flex",alignItems:"center",justifyContent:"center",
     color:"#fff",fontSize:size*.36,fontWeight:600,fontFamily:SF,
-    boxShadow:"0 1px 4px rgba(0,0,0,.12)"}}>{!photo&&ini}</div>;
+    boxShadow:"0 1px 4px rgba(0,0,0,.12)",
+    filter:deceased?"grayscale(0.75)":"none",opacity:deceased?0.8:1}}>{!photo&&ini}</div>;
 }
 
 function Node({m,sel,onSel,onDrag,zoom}){
@@ -50,7 +57,7 @@ function Node({m,sel,onSel,onDrag,zoom}){
   const move=e=>{if(dr.current)onDrag(m.id,e.clientX/zoom-off.current.x,e.clientY/zoom-off.current.y);};
   const up=e=>{dr.current=false;ref.current?.releasePointerCapture(e.pointerId);};
   const isSel=sel===m.id;
-  const sub=[m.birthDate,m.birthPlace].filter(Boolean).join(" · ");
+  const sub=[fmtDate(m.birthDate),m.birthPlace].filter(Boolean).join(" · ");
   const pCount=(m.partnerships||[]).length;
 
   return (
@@ -58,15 +65,17 @@ function Node({m,sel,onSel,onDrag,zoom}){
       <div ref={ref} onPointerDown={down} onPointerMove={move} onPointerUp={up}
         onClick={e=>{e.stopPropagation();onSel(m.id);}}
         style={{width:160,height:88,borderRadius:20,
-          background:isSel?"rgba(0,122,255,0.08)":T.card,
+          background:isSel?"rgba(0,122,255,0.08)":m.deceased?"rgba(120,120,128,0.08)":T.card,
           backdropFilter:blur,WebkitBackdropFilter:blur,
           border:isSel?"2px solid rgba(0,122,255,0.4)":`0.5px solid ${T.sep}`,
           display:"flex",alignItems:"center",gap:10,padding:"0 12px",
           cursor:"grab",transition:"all .2s",boxSizing:"border-box",
           boxShadow:isSel?"0 2px 12px rgba(0,122,255,0.15)":"0 1px 4px rgba(0,0,0,0.06)"}}>
-        <Av photo={m.photo} name={m.name} size={44} gender={m.gender}/>
+        <Av photo={m.photo} name={m.name} size={44} gender={m.gender} deceased={m.deceased}/>
         <div style={{minWidth:0,flex:1}}>
-          <div style={{color:T.label,fontSize:13.5,fontWeight:600,fontFamily:SF,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.name}</div>
+          <div style={{color:m.deceased?T.label2:T.label,fontSize:13.5,fontWeight:600,fontFamily:SF,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            {m.deceased&&<span style={{marginRight:2,fontSize:11}}>†</span>}{m.name}
+          </div>
           {sub&&<div style={{color:T.label3,fontSize:10,fontFamily:SF,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub}</div>}
           {pCount>1&&<div style={{color:T.label2,fontSize:9.5,fontFamily:SF,marginTop:1}}>{pCount} parejas</div>}
         </div>
@@ -126,17 +135,17 @@ function PhotoUp({photo,gender,name,onUp}){
   );
 }
 
-function Toggle({value,onChange}){
+function Toggle({value,onChange,opts=[{l:"Masculino",v:"M"},{l:"Femenino",v:"F"}]}){
   return <div style={{display:"flex",background:T.fill,borderRadius:9,padding:2}}>
-    {[{l:"Masculino",v:"M"},{l:"Femenino",v:"F"}].map(o=>
+    {opts.map(o=>
       <button key={o.v} onClick={()=>onChange(o.v)} style={{flex:1,padding:"7px 0",border:"none",borderRadius:7,
         background:o.v===value?"#FFF":"transparent",color:o.v===value?T.label:T.label2,
         fontSize:13,fontWeight:500,fontFamily:SF,cursor:"pointer",
         boxShadow:o.v===value?"0 1px 3px rgba(0,0,0,.08)":"none",transition:"all .2s"}}>{o.l}</button>)}
   </div>;
 }
-function Inp({value,onChange,placeholder}){
-  return <input value={value} onChange={onChange} placeholder={placeholder} style={{
+function Inp({value,onChange,placeholder,type="text"}){
+  return <input type={type} value={value} onChange={onChange} placeholder={placeholder} style={{
     width:"100%",padding:"11px 0",background:"transparent",border:"none",
     color:T.label,fontSize:16,fontFamily:SF,outline:"none",boxSizing:"border-box"}}/>;
 }
@@ -144,6 +153,11 @@ function Sel({value,onChange,children}){
   return <select value={value} onChange={onChange} style={{
     width:"100%",padding:"11px 0",background:"transparent",border:"none",
     color:T.label,fontSize:16,fontFamily:SF,outline:"none",boxSizing:"border-box",appearance:"none"}}>{children}</select>;
+}
+function DatePick({value,onChange}){
+  return <input type="date" value={value} onChange={onChange}
+    style={{background:"transparent",border:"none",color:value?T.label:T.label3,
+      fontSize:15,fontFamily:SF,outline:"none",cursor:"pointer",flex:1,textAlign:"right"}}/>;
 }
 
 function App(){
@@ -156,7 +170,7 @@ function App(){
   });
   const [sel,setSel]=useState(null);
   const [panel,setPanel]=useState(null);
-  const [form,setForm]=useState({name:"",birthDate:"",birthPlace:"",gender:"M",parent1Id:"",parent2Id:"",photo:null});
+  const [form,setForm]=useState({name:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",residence:"",email:"",phone:"",parent1Id:"",parent2Id:"",photo:null});
   const [toast,setToast]=useState(null);
   const [pForm,setPForm]=useState({partnerId:"",type:"actual"});
   const [zoom,setZoom]=useState(0.8);
@@ -193,21 +207,23 @@ function App(){
   const selM=members.find(m=>m.id===sel);
   const selPartnerships=selM?.partnerships||[];
 
-  const openAdd=()=>{setForm({name:"",birthDate:"",birthPlace:"",gender:"M",parent1Id:sel||"",parent2Id:"",photo:null});setPanel("add");};
-  const openEdit=()=>{if(!selM)return;setForm({name:selM.name,birthDate:selM.birthDate||"",birthPlace:selM.birthPlace||"",gender:selM.gender,parent1Id:selM.parent1Id||"",parent2Id:selM.parent2Id||"",photo:selM.photo});setPanel("edit");};
+  const openAdd=()=>{setForm({name:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",residence:"",email:"",phone:"",parent1Id:sel||"",parent2Id:"",photo:null});setPanel("add");};
+  const openEdit=()=>{if(!selM)return;setForm({name:selM.name,birthDate:selM.birthDate||"",birthPlace:selM.birthPlace||"",gender:selM.gender,deceased:selM.deceased||false,deathDate:selM.deathDate||"",residence:selM.residence||"",email:selM.email||"",phone:selM.phone||"",parent1Id:selM.parent1Id||"",parent2Id:selM.parent2Id||"",photo:selM.photo});setPanel("edit");};
   const openPartnerships=()=>{if(!selM)return;setPForm({partnerId:"",type:"actual"});setPanel("partnerships");};
 
   const save=()=>{
     if(!form.name.trim())return;
+    const extra={deceased:form.deceased,deathDate:form.deceased?form.deathDate:"",
+      residence:form.residence,email:form.email,phone:form.phone};
     if(panel==="add"){
       const p1=members.find(m=>m.id===form.parent1Id);
       const n={id:genId(),name:form.name.trim(),birthDate:form.birthDate,birthPlace:form.birthPlace,gender:form.gender,
-        parent1Id:form.parent1Id||null,parent2Id:form.parent2Id||null,partnerships:[],photo:form.photo,
+        ...extra,parent1Id:form.parent1Id||null,parent2Id:form.parent2Id||null,partnerships:[],photo:form.photo,
         x:p1?p1.x+(Math.random()-.5)*100:400,y:p1?p1.y+200:100};
       update(p=>[...p,n]);
     } else if(sel){
       update(p=>p.map(m=>m.id===sel?{...m,name:form.name.trim(),birthDate:form.birthDate,birthPlace:form.birthPlace,
-        gender:form.gender,parent1Id:form.parent1Id||null,parent2Id:form.parent2Id||null,photo:form.photo}:m));
+        gender:form.gender,...extra,parent1Id:form.parent1Id||null,parent2Id:form.parent2Id||null,photo:form.photo}:m));
     }
     setPanel(null);
   };
@@ -325,12 +341,40 @@ function App(){
             <div style={{padding:"0 20px 28px",display:"flex",flexDirection:"column",gap:16}}>
               <PhotoUp photo={form.photo} gender={form.gender} name={form.name} onUp={d=>setForm({...form,photo:d})}/>
               <Toggle value={form.gender} onChange={v=>setForm({...form,gender:v})}/>
+              <Toggle value={form.deceased?"deceased":"alive"}
+                onChange={v=>setForm({...form,deceased:v==="deceased",deathDate:v==="alive"?"":form.deathDate})}
+                opts={[{l:"Vivo/a",v:"alive"},{l:"Fallecido/a",v:"deceased"}]}/>
               <div>
                 {secTitle("Información")}
                 <div style={{background:"#FFF",borderRadius:12,overflow:"hidden",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.04)"}}>
                   <div style={rowStyle}><Inp value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Nombre completo"/></div>
-                  <div style={rowStyle}><Inp value={form.birthDate} onChange={e=>setForm({...form,birthDate:e.target.value})} placeholder="Fecha de nacimiento (ej: 15/06/1990)"/></div>
+                  <div style={{...rowStyle,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <span style={{color:T.label3,fontSize:15,fontFamily:SF,flexShrink:0}}>Fecha de nacimiento</span>
+                    <DatePick value={form.birthDate} onChange={e=>setForm({...form,birthDate:e.target.value})}/>
+                  </div>
                   <div style={{...rowStyle,borderBottom:"none"}}><Inp value={form.birthPlace} onChange={e=>setForm({...form,birthPlace:e.target.value})} placeholder="Lugar de nacimiento"/></div>
+                </div>
+              </div>
+              {form.deceased&&<div>
+                {secTitle("Fallecimiento")}
+                <div style={{background:"#FFF",borderRadius:12,overflow:"hidden",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.04)"}}>
+                  <div style={{...rowStyle,borderBottom:"none",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <span style={{color:T.label3,fontSize:15,fontFamily:SF,flexShrink:0}}>Fecha de fallecimiento</span>
+                    <DatePick value={form.deathDate} onChange={e=>setForm({...form,deathDate:e.target.value})}/>
+                  </div>
+                </div>
+              </div>}
+              <div>
+                {secTitle("Residencia")}
+                <div style={{background:"#FFF",borderRadius:12,overflow:"hidden",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.04)"}}>
+                  <div style={{...rowStyle,borderBottom:"none"}}><Inp value={form.residence} onChange={e=>setForm({...form,residence:e.target.value})} placeholder="Lugar de residencia actual"/></div>
+                </div>
+              </div>
+              <div>
+                {secTitle("Contacto")}
+                <div style={{background:"#FFF",borderRadius:12,overflow:"hidden",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.04)"}}>
+                  <div style={rowStyle}><Inp type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="Correo electrónico"/></div>
+                  <div style={{...rowStyle,borderBottom:"none"}}><Inp type="tel" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="Teléfono"/></div>
                 </div>
               </div>
               <div>
