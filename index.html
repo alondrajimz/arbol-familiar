@@ -49,12 +49,25 @@ const T={bg:"#F2F2F7",card:"rgba(255,255,255,0.88)",barBg:"rgba(249,249,249,0.78
 
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
 function fmtDate(d){if(!d)return"";if(/^\d{4}-\d{2}-\d{2}$/.test(d)){const[y,mo,day]=d.split("-");return`${day}/${mo}/${y}`;}return d;}
+function calcAge(birthDate,deathDate,deceased){
+  if(!birthDate)return null;
+  const birth=new Date(birthDate);if(isNaN(birth.getTime()))return null;
+  const ref=deceased&&deathDate?new Date(deathDate):new Date();
+  let age=ref.getFullYear()-birth.getFullYear();
+  const mo=ref.getMonth()-birth.getMonth();
+  if(mo<0||(mo===0&&ref.getDate()<birth.getDate()))age--;
+  return age>=0?age:null;
+}
 
-// Firebase helpers
-function saveToDB(members){
-  const data={};
-  members.forEach(m=>{data[m.id]={...m};});
-  dbRef.set(data);
+// Photo localStorage helpers
+const PHOTO_KEY="familyPhotos";
+function savePhotosLocally(members){
+  const photos={};
+  members.forEach(m=>{if(m.photo)photos[m.id]=m.photo;});
+  localStorage.setItem(PHOTO_KEY,JSON.stringify(photos));
+}
+function loadPhotosLocally(){
+  try{return JSON.parse(localStorage.getItem(PHOTO_KEY)||"{}");}catch{return{};}
 }
 
 function Av({photo,name,size=44,gender,deceased}){
@@ -74,7 +87,8 @@ function Node({m,sel,onSel,onDrag}){
   const move=e=>{if(dr.current)onDrag(m.id,e.clientX-off.current.x,e.clientY-off.current.y);};
   const up=e=>{dr.current=false;ref.current?.releasePointerCapture(e.pointerId);};
   const isSel=sel===m.id;
-  const sub=[fmtDate(m.birthDate),m.birthPlace].filter(Boolean).join(" · ");
+  const age=calcAge(m.birthDate,m.deathDate,m.deceased);
+  const sub=[age!=null?`${age} años`:null,m.birthPlace].filter(Boolean).join(" · ");
   const pCount=(m.partnerships||[]).length;
   return (
     <foreignObject x={m.x-80} y={m.y-44} width={160} height={88}>
@@ -195,7 +209,7 @@ function App(){
   const [members,setMembers]=useState([]);
   const [sel,setSel]=useState(null);
   const [panel,setPanel]=useState(null);
-  const [form,setForm]=useState({name:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",residence:"",email:"",phone:"",parent1Id:"",parent2Id:"",photo:null});
+  const [form,setForm]=useState({name:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",residence:"",email:"",phone:"",parent1Id:"",parent2Id:"",photo:null});
   const [loading,setLoading]=useState(true);
   const [toast,setToast]=useState(null);
   const [saving,setSaving]=useState(false);
@@ -211,7 +225,8 @@ function App(){
       if(isLocalUpdate.current){isLocalUpdate.current=false;return;}
       const val=snapshot.val();
       if(val){
-        const arr=Object.values(val).map(m=>({...m,partnerships:m.partnerships||[]}));
+        const photos=loadPhotosLocally();
+        const arr=Object.values(val).map(m=>({...m,partnerships:m.partnerships||[],photo:photos[m.id]||null}));
         setMembers(arr);
       }
     });
@@ -227,12 +242,13 @@ function App(){
     setSaving(true);
     isLocalUpdate.current=true;
     const data={};
-    members.forEach(m=>{data[m.id]={...m};});
+    members.forEach(m=>{const{photo,...rest}=m;data[m.id]=rest;});
     try{
       await Promise.race([
         dbRef.set(data),
         new Promise((_,rej)=>setTimeout(()=>rej('timeout'),5000))
       ]);
+      savePhotosLocally(members);
       showToast("Guardado ✓");
     }catch(e){
       isLocalUpdate.current=false;
@@ -245,13 +261,13 @@ function App(){
   const selM=members.find(m=>m.id===sel);
   const selPartnerships=selM?.partnerships||[];
 
-  const openAdd=()=>{setForm({name:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",residence:"",email:"",phone:"",parent1Id:sel||"",parent2Id:"",photo:null});setPanel("add");};
-  const openEdit=()=>{if(!selM)return;setForm({name:selM.name,birthDate:selM.birthDate||"",birthPlace:selM.birthPlace||"",gender:selM.gender,deceased:selM.deceased||false,deathDate:selM.deathDate||"",residence:selM.residence||"",email:selM.email||"",phone:selM.phone||"",parent1Id:selM.parent1Id||"",parent2Id:selM.parent2Id||"",photo:selM.photo});setPanel("edit");};
+  const openAdd=()=>{setForm({name:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",residence:"",email:"",phone:"",parent1Id:sel||"",parent2Id:"",photo:null});setPanel("add");};
+  const openEdit=()=>{if(!selM)return;setForm({name:selM.name,birthDate:selM.birthDate||"",birthPlace:selM.birthPlace||"",gender:selM.gender,deceased:selM.deceased||false,deathDate:selM.deathDate||"",deathPlace:selM.deathPlace||"",residence:selM.residence||"",email:selM.email||"",phone:selM.phone||"",parent1Id:selM.parent1Id||"",parent2Id:selM.parent2Id||"",photo:selM.photo});setPanel("edit");};
   const openPartnerships=()=>{if(!selM)return;setPForm({partnerId:"",type:"actual"});setPanel("partnerships");};
 
   const save=()=>{
     if(!form.name.trim())return;
-    const extra={deceased:form.deceased,deathDate:form.deceased?form.deathDate:"",
+    const extra={deceased:form.deceased,deathDate:form.deceased?form.deathDate:"",deathPlace:form.deceased?form.deathPlace:"",
       residence:form.residence,email:form.email,phone:form.phone};
     if(panel==="add"){
       const p1=members.find(m=>m.id===form.parent1Id);
@@ -327,7 +343,7 @@ function App(){
           <span style={{fontSize:26}}>🌳</span>
           <div>
             <div style={{fontSize:20,fontWeight:700,color:T.label,letterSpacing:-.4}}>Mi Familia</div>
-            <div style={{fontSize:12,color:T.label2}}>{members.length} personas · En línea</div>
+            <div style={{fontSize:12,color:T.label2}}>{members.length} personas</div>
           </div>
         </div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
@@ -398,10 +414,11 @@ function App(){
               {form.deceased&&<div>
                 {secTitle("Fallecimiento")}
                 <div style={{background:"#FFF",borderRadius:12,overflow:"hidden",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.04)"}}>
-                  <div style={{...rowStyle,borderBottom:"none",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div style={{...rowStyle,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                     <span style={{color:T.label3,fontSize:15,fontFamily:SF,flexShrink:0}}>Fecha de fallecimiento</span>
                     <DatePick value={form.deathDate} onChange={e=>setForm({...form,deathDate:e.target.value})}/>
                   </div>
+                  <div style={{...rowStyle,borderBottom:"none"}}><Inp value={form.deathPlace} onChange={e=>setForm({...form,deathPlace:e.target.value})} placeholder="Lugar de fallecimiento"/></div>
                 </div>
               </div>}
               <div>
