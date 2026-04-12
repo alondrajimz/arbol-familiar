@@ -218,16 +218,16 @@ function App(){
   },[]);
 
   const update=useCallback((fn)=>{
+    setMembers(prev=>typeof fn==="function"?fn(prev):fn);
+  },[]);
+
+  const saveAll=useCallback(()=>{
     setMembers(prev=>{
-      const next=typeof fn==="function"?fn(prev):fn;
-      if(saveTimer.current)clearTimeout(saveTimer.current);
-      saveTimer.current=setTimeout(()=>{
-        isLocalUpdate.current=true;
-        saveToDB(next);
-        showToast("Guardado ✓");
-      },800);
-      return next;
+      isLocalUpdate.current=true;
+      saveToDB(prev);
+      return prev;
     });
+    showToast("Guardado ✓");
   },[]);
 
   const drag=useCallback((id,x,y)=>update(p=>p.map(m=>m.id===id?{...m,x,y}:m)),[update]);
@@ -337,6 +337,18 @@ function App(){
           {members.map(m=><Node key={m.id} m={m} sel={sel} onSel={setSel} onDrag={drag}/>)}
         </svg>
       </div>
+
+      {!panel&&<button onClick={saveAll}
+        style={{position:"fixed",bottom:24,right:24,zIndex:30,width:56,height:56,borderRadius:28,
+          background:T.blue,border:"none",cursor:"pointer",display:"flex",alignItems:"center",
+          justifyContent:"center",boxShadow:"0 4px 20px rgba(0,122,255,0.45)",transition:"transform .15s"}}
+        onPointerDown={e=>e.currentTarget.style.transform="scale(0.9)"}
+        onPointerUp={e=>e.currentTarget.style.transform="scale(1)"}
+        onPointerLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </button>}
 
       {panel&&<>
         <div onClick={()=>setPanel(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.3)",zIndex:50}}/>
