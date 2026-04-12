@@ -90,11 +90,14 @@ function Node({m,sel,onSel,onDrag}){
   const age=calcAge(m.birthDate,m.deathDate,m.deceased);
   const sub=[age!=null?`${age} años`:null,m.birthPlace].filter(Boolean).join(" · ");
   const pCount=(m.partnerships||[]).length;
+  const nameParts=(m.name||"").trim().split(/\s+/);
+  const firstName=nameParts[0]||"";
+  const lastName=nameParts.slice(1).join(" ");
   return (
-    <foreignObject x={m.x-80} y={m.y-44} width={160} height={88}>
+    <foreignObject x={m.x-80} y={m.y-48} width={160} height={96}>
       <div ref={ref} onPointerDown={down} onPointerMove={move} onPointerUp={up}
         onClick={e=>{e.stopPropagation();onSel(m.id);}}
-        style={{width:160,height:88,borderRadius:20,
+        style={{width:160,height:96,borderRadius:20,
           background:isSel?"rgba(0,122,255,0.08)":m.deceased?"rgba(120,120,128,0.08)":T.card,
           backdropFilter:blur,WebkitBackdropFilter:blur,
           border:isSel?"2px solid rgba(0,122,255,0.4)":`0.5px solid ${T.sep}`,
@@ -103,10 +106,11 @@ function Node({m,sel,onSel,onDrag}){
           boxShadow:isSel?"0 2px 12px rgba(0,122,255,0.15)":"0 1px 4px rgba(0,0,0,0.06)"}}>
         <Av photo={m.photo} name={m.name} size={44} gender={m.gender} deceased={m.deceased}/>
         <div style={{minWidth:0,flex:1}}>
-          <div style={{color:m.deceased?T.label2:T.label,fontSize:13.5,fontWeight:600,fontFamily:SF,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-            {m.deceased&&<span style={{marginRight:2,fontSize:11}}>†</span>}{m.name}
+          <div style={{color:m.deceased?T.label2:T.label,fontSize:15,fontWeight:700,fontFamily:SF,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:"1.2"}}>
+            {m.deceased&&<span style={{marginRight:2,fontSize:11}}>†</span>}{firstName}
           </div>
-          {sub&&<div style={{color:T.label3,fontSize:10,fontFamily:SF,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub}</div>}
+          {lastName&&<div style={{color:m.deceased?T.label3:T.label2,fontSize:11.5,fontWeight:500,fontFamily:SF,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:"1.2"}}>{lastName}</div>}
+          {sub&&<div style={{color:T.label3,fontSize:10,fontFamily:SF,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub}</div>}
           {pCount>1&&<div style={{color:T.label2,fontSize:9.5,fontFamily:SF,marginTop:1}}>{pCount} parejas</div>}
         </div>
       </div>
@@ -134,11 +138,11 @@ function Lines({members}){
     const p1=m.parent1Id?members.find(x=>x.id===m.parent1Id):null;
     const p2=m.parent2Id?members.find(x=>x.id===m.parent2Id):null;
     let fx,fy;
-    if(p1&&p2){fx=(p1.x+p2.x)/2;fy=Math.max(p1.y,p2.y)+44;}
-    else if(p1){fx=p1.x;fy=p1.y+44;}
-    else if(p2){fx=p2.x;fy=p2.y+44;}
+    if(p1&&p2){fx=(p1.x+p2.x)/2;fy=Math.max(p1.y,p2.y)+48;}
+    else if(p1){fx=p1.x;fy=p1.y+48;}
+    else if(p2){fx=p2.x;fy=p2.y+48;}
     else return;
-    const tx=m.x,ty=m.y-44,my2=(fy+ty)/2;
+    const tx=m.x,ty=m.y-48,my2=(fy+ty)/2;
     p.push(<path key={`c-${m.id}`} d={`M${fx},${fy} C${fx},${my2} ${tx},${my2} ${tx},${ty}`}
       stroke="rgba(0,122,255,0.2)" strokeWidth={1.5} fill="none"/>);
   });
