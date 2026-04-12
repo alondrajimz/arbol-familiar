@@ -70,6 +70,68 @@ function loadPhotosLocally(){
   try{return JSON.parse(localStorage.getItem(PHOTO_KEY)||"{}");}catch{return{};}
 }
 
+function autoLayout(members){
+  if(!members.length)return members;
+  // Assign generation via BFS from roots (no parents)
+  const gen={};
+  members.forEach(m=>{if(!m.parent1Id&&!m.parent2Id)gen[m.id]=0;});
+  let changed=true;
+  while(changed){
+    changed=false;
+    members.forEach(m=>{
+      if(gen[m.id]!==undefined)return;
+      const pgs=[m.parent1Id,m.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!==undefined);
+      if(pgs.length){gen[m.id]=Math.max(...pgs)+1;changed=true;}
+    });
+  }
+  members.forEach(m=>{if(gen[m.id]===undefined)gen[m.id]=0;});
+  const maxGen=Math.max(...Object.values(gen),0);
+  const XGAP=200,YGAP=180,YTOP=80,CW=1400;
+  const pos={};
+  const byDate=(a,b)=>{
+    if(a.birthDate&&b.birthDate)return a.birthDate.localeCompare(b.birthDate);
+    return a.birthDate?-1:b.birthDate?1:(a.name||"").localeCompare(b.name||"");
+  };
+  for(let g=0;g<=maxGen;g++){
+    const gm=members.filter(m=>gen[m.id]===g);
+    if(!gm.length)continue;
+    let ordered=[];
+    if(g===0){
+      // sort by birthDate, then group couples (man left, woman right)
+      const sorted=[...gm].sort(byDate);
+      const placed=new Set();
+      sorted.forEach(m=>{
+        if(placed.has(m.id))return;
+        placed.add(m.id);
+        const partner=(m.partnerships||[]).map(pr=>sorted.find(x=>x.id===pr.partnerId)).filter(Boolean)[0];
+        if(partner&&!placed.has(partner.id)){
+          placed.add(partner.id);
+          if(m.gender==="M"||partner.gender==="F")ordered.push(m,partner);
+          else ordered.push(partner,m);
+        }else ordered.push(m);
+      });
+    }else{
+      // group by parent pair sorted by parents' midpoint x, siblings sorted by birthDate
+      const groups={};
+      gm.forEach(m=>{
+        const pids=[m.parent1Id,m.parent2Id].filter(Boolean).sort().join("|")||`_${m.id}`;
+        const pxs=[m.parent1Id,m.parent2Id].filter(Boolean).map(id=>pos[id]?.x).filter(x=>x!==undefined);
+        const mx=pxs.length?pxs.reduce((a,b)=>a+b,0)/pxs.length:CW/2;
+        if(!groups[pids])groups[pids]={mx,list:[]};
+        groups[pids].list.push(m);
+      });
+      Object.values(groups).sort((a,b)=>a.mx-b.mx).forEach(grp=>{
+        ordered.push(...[...grp.list].sort(byDate));
+      });
+    }
+    const totalW=(ordered.length-1)*XGAP;
+    const startX=Math.max(XGAP/2,(CW-totalW)/2);
+    const y=YTOP+g*YGAP;
+    ordered.forEach((m,i)=>pos[m.id]={x:startX+i*XGAP,y});
+  }
+  return members.map(m=>pos[m.id]?{...m,...pos[m.id]}:m);
+}
+
 function Av({photo,name,size=44,gender,deceased}){
   const ini=(name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
   const g=gender==="F"?"linear-gradient(135deg,#FF2D55,#FF6482)":"linear-gradient(135deg,#007AFF,#5AC8FA)";
@@ -264,7 +326,10 @@ function App(){
     const data={};
     members.forEach(m=>{const{photo,...rest}=m;data[m.id]=rest;});
     dbRef.set(data)
-      .then(()=>{savePhotosLocally(members);showToast("Guardado ✓");setSaving(false);})
+      .then(()=>{
+        savePhotosLocally(members);showToast("Guardado ✓");setSaving(false);
+        const laid=autoLayout(members);update(laid);scheduleAutoSave(laid);
+      })
       .catch(()=>{isLocalUpdate.current=false;showToast("Error al guardar, intenta de nuevo");setSaving(false);});
   };
 
