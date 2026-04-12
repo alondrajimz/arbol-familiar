@@ -301,13 +301,26 @@ function App(){
     }));
   };
 
-  const remove=()=>{
+  const remove=async()=>{
     if(!sel||!confirm("¿Eliminar a "+selM?.name+"?"))return;
-    update(p=>p.filter(m=>m.id!==sel).map(m=>({...m,
-      parent1Id:m.parent1Id===sel?null:m.parent1Id,
-      parent2Id:m.parent2Id===sel?null:m.parent2Id,
-      partnerships:(m.partnerships||[]).filter(x=>x.partnerId!==sel)})));
+    const id=sel;
+    const updated=members
+      .filter(m=>m.id!==id)
+      .map(m=>({...m,
+        parent1Id:m.parent1Id===id?null:m.parent1Id,
+        parent2Id:m.parent2Id===id?null:m.parent2Id,
+        partnerships:(m.partnerships||[]).filter(x=>x.partnerId!==id)}));
+    update(updated);
     setSel(null);setPanel(null);
+    isLocalUpdate.current=true;
+    const patch={[id]:null};
+    updated.forEach(m=>{
+      const orig=members.find(x=>x.id===m.id);
+      const affected=orig&&(orig.parent1Id===id||orig.parent2Id===id||(orig.partnerships||[]).some(x=>x.partnerId===id));
+      if(affected){const{photo,...rest}=m;patch[m.id]=rest;}
+    });
+    try{await dbRef.update(patch);}
+    catch{isLocalUpdate.current=false;}
   };
 
   const pill=(label,color,action)=>(
