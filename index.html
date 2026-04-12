@@ -215,6 +215,21 @@ function App(){
   const [saving,setSaving]=useState(false);
   const [pForm,setPForm]=useState({partnerId:"",type:"actual"});
   const isLocalUpdate=useRef(false);
+  const autoSaveTimer=useRef(null);
+
+  const persistToFirebase=(membersArr)=>{
+    isLocalUpdate.current=true;
+    const data={};
+    membersArr.forEach(m=>{const{photo,...rest}=m;data[m.id]=rest;});
+    dbRef.set(data)
+      .then(()=>{savePhotosLocally(membersArr);showToast("Guardado ✓");})
+      .catch(()=>{isLocalUpdate.current=false;showToast("Error al guardar, intenta de nuevo");});
+  };
+
+  const scheduleAutoSave=(membersArr)=>{
+    clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current=setTimeout(()=>persistToFirebase(membersArr),2000);
+  };
 
   const showToast=(msg)=>{setToast(msg);setTimeout(()=>setToast(null),2400);};
 
@@ -237,24 +252,16 @@ function App(){
     setMembers(prev=>typeof fn==="function"?fn(prev):fn);
   },[]);
 
-  const saveAll=async()=>{
+  const saveAll=()=>{
     if(saving)return;
+    clearTimeout(autoSaveTimer.current);
     setSaving(true);
     isLocalUpdate.current=true;
     const data={};
     members.forEach(m=>{const{photo,...rest}=m;data[m.id]=rest;});
-    try{
-      await Promise.race([
-        dbRef.set(data),
-        new Promise((_,rej)=>setTimeout(()=>rej('timeout'),5000))
-      ]);
-      savePhotosLocally(members);
-      showToast("Guardado ✓");
-    }catch(e){
-      isLocalUpdate.current=false;
-      showToast("Error al guardar, intenta de nuevo");
-    }
-    setSaving(false);
+    dbRef.set(data)
+      .then(()=>{savePhotosLocally(members);showToast("Guardado ✓");setSaving(false);})
+      .catch(()=>{isLocalUpdate.current=false;showToast("Error al guardar, intenta de nuevo");setSaving(false);});
   };
 
   const drag=useCallback((id,x,y)=>update(p=>p.map(m=>m.id===id?{...m,x,y}:m)),[update]);
@@ -269,16 +276,18 @@ function App(){
     if(!form.name.trim())return;
     const extra={deceased:form.deceased,deathDate:form.deceased?form.deathDate:"",deathPlace:form.deceased?form.deathPlace:"",
       residence:form.residence,email:form.email,phone:form.phone};
+    let next;
     if(panel==="add"){
       const p1=members.find(m=>m.id===form.parent1Id);
       const n={id:genId(),name:form.name.trim(),birthDate:form.birthDate,birthPlace:form.birthPlace,
         gender:form.gender,...extra,parent1Id:form.parent1Id||null,parent2Id:form.parent2Id||null,
         partnerships:[],photo:form.photo,x:p1?p1.x+(Math.random()-.5)*100:400,y:p1?p1.y+200:100};
-      update(p=>[...p,n]);
+      next=[...members,n];
     } else if(sel){
-      update(p=>p.map(m=>m.id===sel?{...m,name:form.name.trim(),birthDate:form.birthDate,birthPlace:form.birthPlace,
-        gender:form.gender,...extra,parent1Id:form.parent1Id||null,parent2Id:form.parent2Id||null,photo:form.photo}:m));
+      next=members.map(m=>m.id===sel?{...m,name:form.name.trim(),birthDate:form.birthDate,birthPlace:form.birthPlace,
+        gender:form.gender,...extra,parent1Id:form.parent1Id||null,parent2Id:form.parent2Id||null,photo:form.photo}:m);
     }
+    if(next){update(next);scheduleAutoSave(next);}
     setPanel(null);
   };
 
@@ -301,7 +310,7 @@ function App(){
     }));
   };
 
-  const remove=async()=>{
+  const remove=()=>{
     if(!sel||!confirm("¿Eliminar a "+selM?.name+"?"))return;
     const id=sel;
     const updated=members
@@ -312,15 +321,7 @@ function App(){
         partnerships:(m.partnerships||[]).filter(x=>x.partnerId!==id)}));
     update(updated);
     setSel(null);setPanel(null);
-    isLocalUpdate.current=true;
-    const patch={[id]:null};
-    updated.forEach(m=>{
-      const orig=members.find(x=>x.id===m.id);
-      const affected=orig&&(orig.parent1Id===id||orig.parent2Id===id||(orig.partnerships||[]).some(x=>x.partnerId===id));
-      if(affected){const{photo,...rest}=m;patch[m.id]=rest;}
-    });
-    try{await dbRef.update(patch);}
-    catch{isLocalUpdate.current=false;}
+    scheduleAutoSave(updated);
   };
 
   const pill=(label,color,action)=>(
