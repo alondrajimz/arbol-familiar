@@ -34,6 +34,7 @@ input,select,button{font-family:inherit}
 ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:3px}
 @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 @keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -197,22 +198,22 @@ function App(){
   const [form,setForm]=useState({name:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",residence:"",email:"",phone:"",parent1Id:"",parent2Id:"",photo:null});
   const [loading,setLoading]=useState(true);
   const [toast,setToast]=useState(null);
+  const [saving,setSaving]=useState(false);
   const [pForm,setPForm]=useState({partnerId:"",type:"actual"});
-  const saveTimer=useRef(null);
   const isLocalUpdate=useRef(false);
 
-  const showToast=(msg)=>{setToast(msg);setTimeout(()=>setToast(null),1800);};
+  const showToast=(msg)=>{setToast(msg);setTimeout(()=>setToast(null),2400);};
 
   // Listen to Firebase in realtime
   useEffect(()=>{
     const unsub=dbRef.on("value",(snapshot)=>{
+      setLoading(false);
       if(isLocalUpdate.current){isLocalUpdate.current=false;return;}
       const val=snapshot.val();
       if(val){
         const arr=Object.values(val).map(m=>({...m,partnerships:m.partnerships||[]}));
         setMembers(arr);
       }
-      setLoading(false);
     });
     return ()=>dbRef.off("value",unsub);
   },[]);
@@ -221,14 +222,24 @@ function App(){
     setMembers(prev=>typeof fn==="function"?fn(prev):fn);
   },[]);
 
-  const saveAll=useCallback(()=>{
-    setMembers(prev=>{
-      isLocalUpdate.current=true;
-      saveToDB(prev);
-      return prev;
-    });
-    showToast("Guardado ✓");
-  },[]);
+  const saveAll=async()=>{
+    if(saving)return;
+    setSaving(true);
+    isLocalUpdate.current=true;
+    const data={};
+    members.forEach(m=>{data[m.id]={...m};});
+    try{
+      await Promise.race([
+        dbRef.set(data),
+        new Promise((_,rej)=>setTimeout(()=>rej('timeout'),5000))
+      ]);
+      showToast("Guardado ✓");
+    }catch(e){
+      isLocalUpdate.current=false;
+      showToast("Error al guardar, intenta de nuevo");
+    }
+    setSaving(false);
+  };
 
   const drag=useCallback((id,x,y)=>update(p=>p.map(m=>m.id===id?{...m,x,y}:m)),[update]);
   const selM=members.find(m=>m.id===sel);
@@ -327,10 +338,6 @@ function App(){
         </div>
       </div>
 
-      <div style={{padding:"6px 20px 4px",color:T.label3,fontSize:11.5,fontFamily:SF}}>
-        Arrastra para mover · Toca para seleccionar · Los cambios se sincronizan en tiempo real
-      </div>
-
       <div style={{flex:1,overflow:"auto",background:T.bg}}>
         <svg width="1400" height="1000" onClick={()=>setSel(null)} style={{display:"block"}}>
           <Lines members={members}/>
@@ -338,16 +345,20 @@ function App(){
         </svg>
       </div>
 
-      {!panel&&<button onClick={saveAll}
-        style={{position:"fixed",bottom:24,right:24,zIndex:30,width:56,height:56,borderRadius:28,
-          background:T.blue,border:"none",cursor:"pointer",display:"flex",alignItems:"center",
-          justifyContent:"center",boxShadow:"0 4px 20px rgba(0,122,255,0.45)",transition:"transform .15s"}}
-        onPointerDown={e=>e.currentTarget.style.transform="scale(0.9)"}
+      {!panel&&<button onClick={saveAll} disabled={saving}
+        style={{position:"fixed",bottom:28,right:24,zIndex:30,
+          padding:"0 28px",height:54,borderRadius:27,
+          background:T.blue,border:"none",cursor:saving?"default":"pointer",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+          boxShadow:"0 4px 24px rgba(0,122,255,0.45)",
+          transition:"transform .15s,opacity .15s",opacity:saving?0.82:1}}
+        onPointerDown={e=>{if(!saving)e.currentTarget.style.transform="scale(0.95)";}}
         onPointerUp={e=>e.currentTarget.style.transform="scale(1)"}
         onPointerLeave={e=>e.currentTarget.style.transform="scale(1)"}>
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>
+        {saving
+          ?<div style={{width:22,height:22,borderRadius:11,border:"2.5px solid rgba(255,255,255,0.35)",borderTopColor:"#fff",animation:"spin 0.75s linear infinite"}}/>
+          :<><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <span style={{color:"#fff",fontSize:17,fontWeight:600,fontFamily:SF,letterSpacing:-.2}}>Guardar cambios</span></>}
       </button>}
 
       {panel&&<>
@@ -422,9 +433,6 @@ function App(){
                     </Sel>
                   </div>
                 </div>
-                <div style={{color:T.label3,fontSize:11,fontFamily:SF,paddingLeft:4,marginTop:6}}>
-                  Selecciona ambos padres para conectar correctamente a medios hermanos.
-                </div>
               </div>
             </div>
           </>}
@@ -480,9 +488,6 @@ function App(){
                     fontSize:16,fontWeight:600,fontFamily:SF,cursor:pForm.partnerId?"pointer":"default"}}>
                   Agregar pareja
                 </button>
-              </div>
-              <div style={{color:T.label3,fontSize:12,fontFamily:SF,padding:"0 4px",lineHeight:1.5}}>
-                Las parejas actuales se muestran con línea continua ♥ y las ex parejas con línea punteada.
               </div>
             </div>
           </>}
