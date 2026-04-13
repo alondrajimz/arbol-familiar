@@ -73,7 +73,10 @@ function loadPhotosLocally(){
 
 function autoLayout(members){
   if(!members.length)return members;
-  // Step 1: assign generation via BFS from roots (no parents)
+  const byId={};
+  members.forEach(m=>{byId[m.id]=m;});
+
+  // Phase 1: BFS generation — roots (no parents) = gen 0, children always below parents
   const gen={};
   members.forEach(m=>{if(!m.parent1Id&&!m.parent2Id)gen[m.id]=0;});
   let changed=true;
@@ -85,88 +88,130 @@ function autoLayout(members){
       if(pgs.length){gen[m.id]=Math.max(...pgs)+1;changed=true;}
     });
   }
+  // Disconnected nodes default to gen 0
   members.forEach(m=>{if(gen[m.id]===undefined)gen[m.id]=0;});
-  // Step 2: equalize partners + siblings + re-propagate children. Repeat until stable.
+
+  // Minimum allowed generation given a person's parents
+  const genFloor=id=>{
+    const m=byId[id];if(!m)return 0;
+    const pgs=[m.parent1Id,m.parent2Id].filter(Boolean).map(pid=>gen[pid]).filter(g=>g!==undefined);
+    return pgs.length?Math.max(...pgs)+1:0;
+  };
+
+  // Phase 2: Equalize generations — partners pull UP (MIN+floor check), siblings push DOWN (MAX), re-propagate children
   changed=true;
-  while(changed){
+  let iters=0;
+  while(changed&&iters++<50){
     changed=false;
-    // 2a: partners share same row (MAX)
+    // 2a: partners → MIN equalization, only if both can reach the minimum without violating their parent floor
+    //     This prevents root nodes (floor=0) from being pushed down when their partner has deeper ancestry
     members.forEach(m=>{
       (m.partnerships||[]).forEach(pr=>{
-        if(gen[pr.partnerId]===undefined)return;
-        const maxG=Math.max(gen[m.id],gen[pr.partnerId]);
-        if(gen[m.id]!==maxG){gen[m.id]=maxG;changed=true;}
-        if(gen[pr.partnerId]!==maxG){gen[pr.partnerId]=maxG;changed=true;}
+        const pid=pr.partnerId;
+        if(gen[pid]===undefined)return;
+        const minG=Math.min(gen[m.id],gen[pid]);
+        const flM=genFloor(m.id),flP=genFloor(pid);
+        if(minG>=flM&&minG>=flP){
+          if(gen[m.id]!==minG){gen[m.id]=minG;changed=true;}
+          if(gen[pid]!==minG){gen[pid]=minG;changed=true;}
+        }
       });
     });
-    // 2b: siblings (share at least one parent) share same row (MAX)
-    const childrenOf={};
+    // 2b: siblings (same parent pair) → MAX so they share the same row
+    const sibGroups={};
     members.forEach(m=>{
-      [m.parent1Id,m.parent2Id].filter(Boolean).forEach(pid=>{
-        if(!childrenOf[pid])childrenOf[pid]=[];
-        childrenOf[pid].push(m.id);
-      });
+      const key=[m.parent1Id,m.parent2Id].filter(Boolean).sort().join('|');
+      if(!key)return;
+      if(!sibGroups[key])sibGroups[key]=[];
+      sibGroups[key].push(m.id);
     });
-    Object.values(childrenOf).forEach(ids=>{
-      const maxG=Math.max(...ids.map(id=>gen[id]));
-      ids.forEach(id=>{if(gen[id]!==maxG){gen[id]=maxG;changed=true;}});
+    Object.values(sibGroups).forEach(ids=>{
+      const maxG=Math.max(...ids.map(id=>gen[id]??0));
+      ids.forEach(id=>{if((gen[id]??0)!==maxG){gen[id]=maxG;changed=true;}});
     });
-    // 2c: re-propagate — child gen must be strictly greater than both parents
+    // 2c: re-propagate — children must always be strictly below their parents
     members.forEach(m=>{
       const pgs=[m.parent1Id,m.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!==undefined);
       if(!pgs.length)return;
-      const needed=Math.max(...pgs)+1;
-      if(gen[m.id]<needed){gen[m.id]=needed;changed=true;}
+      const need=Math.max(...pgs)+1;
+      if(gen[m.id]<need){gen[m.id]=need;changed=true;}
     });
   }
+
+  // Phase 3: Bottom-up x positioning — start from deepest generation (leaves), work up to gen 0
+  const XGAP=180,YGAP=200,YTOP=100,CW=1400;
   const maxGen=Math.max(...Object.values(gen),0);
-  const XGAP=200,YGAP=180,YTOP=80,CW=1400;
   const pos={};
-  const byDate=(a,b)=>{
-    if(a.birthDate&&b.birthDate)return a.birthDate.localeCompare(b.birthDate);
-    return a.birthDate?-1:b.birthDate?1:(a.firstName||a.name||"").localeCompare(b.firstName||b.name||"");
-  };
-  // Place couple adjacent (man left, woman right); works for any generation
-  const groupCouples=(arr)=>{
-    const placed=new Set();const out=[];
-    arr.forEach(m=>{
-      if(placed.has(m.id))return;
-      placed.add(m.id);
-      const partner=(m.partnerships||[]).map(pr=>arr.find(x=>x.id===pr.partnerId)).filter(Boolean)[0];
-      if(partner&&!placed.has(partner.id)){
-        placed.add(partner.id);
-        if(m.gender==="M"||partner.gender==="F")out.push(m,partner);
-        else out.push(partner,m);
-      }else out.push(m);
+
+  // Map each person to the set of their children
+  const childrenOf={};
+  members.forEach(m=>{
+    [m.parent1Id,m.parent2Id].filter(Boolean).forEach(pid=>{
+      if(!childrenOf[pid])childrenOf[pid]=new Set();
+      childrenOf[pid].add(m.id);
     });
-    return out;
-  };
-  for(let g=0;g<=maxGen;g++){
-    const gm=members.filter(m=>gen[m.id]===g);
-    if(!gm.length)continue;
-    let flat=[];
-    if(g===0){
-      flat=[...gm].sort(byDate);
-    }else{
-      // group siblings by parent pair, order groups by parents' midpoint x
-      const groups={};
-      gm.forEach(m=>{
-        const pids=[m.parent1Id,m.parent2Id].filter(Boolean).sort().join("|")||`_${m.id}`;
-        const pxs=[m.parent1Id,m.parent2Id].filter(Boolean).map(id=>pos[id]?.x).filter(x=>x!==undefined);
-        const mx=pxs.length?pxs.reduce((a,b)=>a+b,0)/pxs.length:CW/2;
-        if(!groups[pids])groups[pids]={mx,list:[]};
-        groups[pids].list.push(m);
+  });
+
+  for(let g=maxGen;g>=0;g--){
+    const ids=members.filter(m=>gen[m.id]===g).map(m=>m.id);
+    if(!ids.length)continue;
+
+    // Build placement units: couples (2) or singles (1)
+    const placed=new Set();
+    const units=[];
+    ids.forEach(id=>{
+      if(placed.has(id))return;
+      placed.add(id);
+      const m=byId[id];
+      const partnerPr=(m.partnerships||[]).find(pr=>gen[pr.partnerId]===g&&!placed.has(pr.partnerId));
+      if(partnerPr){
+        const pid=partnerPr.partnerId;
+        placed.add(pid);
+        const pm=byId[pid];
+        // Man on the left, woman on the right
+        const mLeft=(m.gender==='M'||(m.gender!=='F'&&pm.gender==='F'));
+        units.push({ids:mLeft?[id,pid]:[pid,id]});
+      }else{
+        units.push({ids:[id]});
+      }
+    });
+
+    // Hint = average x of all already-positioned children of this unit
+    units.forEach(u=>{
+      const xs=[];
+      u.ids.forEach(id=>{
+        (childrenOf[id]||new Set()).forEach(cid=>{if(pos[cid])xs.push(pos[cid].x);});
       });
-      Object.values(groups).sort((a,b)=>a.mx-b.mx).forEach(grp=>{
-        flat.push(...[...grp.list].sort(byDate));
-      });
-    }
-    const ordered=groupCouples(flat);
-    const totalW=(ordered.length-1)*XGAP;
-    const startX=Math.max(XGAP/2,(CW-totalW)/2);
-    const y=YTOP+g*YGAP;
-    ordered.forEach((m,i)=>pos[m.id]={x:startX+i*XGAP,y});
+      u.hint=xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null;
+    });
+
+    // Sort by hint ascending (units with no children go last)
+    units.sort((a,b)=>{
+      if(a.hint===null&&b.hint===null)return 0;
+      if(a.hint===null)return 1;
+      if(b.hint===null)return -1;
+      return a.hint-b.hint;
+    });
+
+    // Assign x: center each unit on its hint, push right to resolve conflicts
+    let cursor=0;
+    units.forEach(u=>{
+      const w=(u.ids.length-1)*XGAP; // 0 for single, XGAP for couple
+      const ideal=u.hint!=null?u.hint-w/2:cursor;
+      const left=Math.max(ideal,cursor);
+      u.ids.forEach((uid,j)=>{pos[uid]={x:left+j*XGAP,y:YTOP+g*YGAP};});
+      cursor=left+w+XGAP;
+    });
   }
+
+  // Phase 4: Center entire tree horizontally in canvas
+  const allXs=Object.values(pos).map(p=>p.x);
+  if(allXs.length){
+    const minX=Math.min(...allXs),maxX=Math.max(...allXs);
+    const offset=(CW-(minX+maxX))/2;
+    Object.keys(pos).forEach(id=>{pos[id]={...pos[id],x:pos[id].x+offset};});
+  }
+
   return members.map(m=>pos[m.id]?{...m,...pos[m.id]}:m);
 }
 
@@ -366,11 +411,18 @@ function App(){
   const fitTree=()=>{
     if(!members.length||!containerRef.current)return;
     const xs=members.map(m=>m.x),ys=members.map(m=>m.y);
-    const treeW=Math.max(...xs)-Math.min(...xs)+160;
-    const treeH=Math.max(...ys)-Math.min(...ys)+120;
+    const minX=Math.min(...xs),maxX=Math.max(...xs);
+    const minY=Math.min(...ys),maxY=Math.max(...ys);
+    const treeW=maxX-minX+160,treeH=maxY-minY+120;
     const cw=containerRef.current.clientWidth,ch=containerRef.current.clientHeight;
     if(!cw||!ch)return;
-    setZoom(Math.min(2,Math.max(0.2,parseFloat(Math.min(cw/treeW,ch/treeH).toFixed(2)))));
+    const z=Math.min(2,Math.max(0.2,parseFloat(Math.min(cw/treeW,ch/treeH).toFixed(2))));
+    setZoom(z);
+    setTimeout(()=>{
+      if(!containerRef.current)return;
+      const cx=(minX+maxX)/2*z,cy=(minY+maxY)/2*z;
+      containerRef.current.scrollTo({left:Math.max(0,cx-cw/2),top:Math.max(0,cy-ch/2),behavior:"smooth"});
+    },50);
   };
 
   // Auto-fit on first load
@@ -378,10 +430,19 @@ function App(){
     if(!loading&&members.length&&!didAutoFit.current&&containerRef.current){
       didAutoFit.current=true;
       const xs=members.map(m=>m.x),ys=members.map(m=>m.y);
-      const treeW=Math.max(...xs)-Math.min(...xs)+160;
-      const treeH=Math.max(...ys)-Math.min(...ys)+120;
+      const minX=Math.min(...xs),maxX=Math.max(...xs);
+      const minY=Math.min(...ys),maxY=Math.max(...ys);
+      const treeW=maxX-minX+160,treeH=maxY-minY+120;
       const cw=containerRef.current.clientWidth,ch=containerRef.current.clientHeight;
-      if(cw&&ch)setZoom(Math.min(2,Math.max(0.2,parseFloat(Math.min(cw/treeW,ch/treeH).toFixed(2)))));
+      if(cw&&ch){
+        const z=Math.min(2,Math.max(0.2,parseFloat(Math.min(cw/treeW,ch/treeH).toFixed(2))));
+        setZoom(z);
+        setTimeout(()=>{
+          if(!containerRef.current)return;
+          const cx=(minX+maxX)/2*z,cy=(minY+maxY)/2*z;
+          containerRef.current.scrollTo({left:Math.max(0,cx-cw/2),top:Math.max(0,cy-ch/2),behavior:"smooth"});
+        },50);
+      }
     }
   },[loading,members]);
 
