@@ -353,6 +353,106 @@ function DatePick({value,onChange}){
       fontSize:15,fontFamily:SF,outline:"none",cursor:"pointer",textAlign:"right"}}/>;
 }
 
+function ProfileSheet({m,members,onClose,onEdit,onRemove}){
+  const age=calcAge(m.birthDate,m.deathDate,m.deceased);
+  const fn=m.firstName||(m.name||"").split(" ")[0]||"";
+  const ln=[m.lastName1,m.lastName2].filter(Boolean).join(" ")||((m.name||"").split(" ").slice(1).join(" "))||"";
+  const parent1=m.parent1Id?members.find(x=>x.id===m.parent1Id):null;
+  const parent2=m.parent2Id?members.find(x=>x.id===m.parent2Id):null;
+  const partners=(m.partnerships||[]).map(pr=>{const p=members.find(x=>x.id===pr.partnerId);return p?{p,type:pr.type}:null;}).filter(Boolean);
+  const children=members.filter(x=>x.parent1Id===m.id||x.parent2Id===m.id);
+
+  const ST=t=><div style={{color:T.label2,fontSize:12,fontWeight:500,fontFamily:SF,paddingLeft:4,marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>{t}</div>;
+  const card={background:"#FFF",borderRadius:12,overflow:"hidden",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.04)"};
+  const rowSep={borderBottom:`0.5px solid ${T.sep}`};
+
+  const InfoRow=({label,value,isLast,href})=>(
+    <div style={{padding:"11px 16px",...(isLast?{}:rowSep),display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+      <span style={{color:T.label2,fontSize:15,fontFamily:SF,flexShrink:0}}>{label}</span>
+      {href
+        ?<a href={href} style={{color:T.blue,fontSize:15,fontFamily:SF,textDecoration:"none",textAlign:"right"}}>{value}</a>
+        :<span style={{color:T.label,fontSize:15,fontFamily:SF,textAlign:"right",flex:1}}>{value}</span>}
+    </div>
+  );
+  const PersonRow=({person,subtitle,subColor,isLast})=>(
+    <div style={{padding:"10px 16px",...(isLast?{}:rowSep),display:"flex",alignItems:"center",gap:10}}>
+      <Av photo={person.photo} name={fullName(person)} size={36} gender={person.gender} deceased={person.deceased}/>
+      <div>
+        <div style={{color:T.label,fontSize:15,fontFamily:SF,fontWeight:500}}>{fullName(person)}</div>
+        <div style={{color:subColor||T.label3,fontSize:12,fontFamily:SF}}>{subtitle}</div>
+      </div>
+    </div>
+  );
+
+  const parentRole=p=>p.gender==="M"?"Padre":p.gender==="F"?"Madre":"Padre/Madre";
+  const childRole=c=>c.gender==="M"?"Hijo":c.gender==="F"?"Hija":"Hijo/a";
+
+  const infoItems=[];
+  if(m.birthDate)infoItems.push({label:"Nacimiento",value:fmtDate(m.birthDate)});
+  if(m.birthPlace)infoItems.push({label:"Lugar de nacimiento",value:m.birthPlace});
+  if(m.residence)infoItems.push({label:"Residencia",value:m.residence});
+
+  const contactItems=[];
+  if(m.phone)contactItems.push({label:"Teléfono",value:m.phone,href:`tel:${m.phone}`});
+  if(m.email)contactItems.push({label:"Correo",value:m.email,href:`mailto:${m.email}`});
+
+  const statusItems=[{label:"Estado",value:m.deceased?"Fallecido/a":"Vivo/a"}];
+  if(m.deceased&&m.deathDate)statusItems.push({label:"Fecha de fallecimiento",value:fmtDate(m.deathDate)});
+  if(m.deceased&&m.deathPlace)statusItems.push({label:"Lugar de descanso",value:m.deathPlace});
+
+  const familyEntries=[
+    ...(parent1?[{person:parent1,subtitle:parentRole(parent1),subColor:T.label3}]:[]),
+    ...(parent2?[{person:parent2,subtitle:parentRole(parent2),subColor:T.label3}]:[]),
+    ...partners.map(({p,type})=>({person:p,subtitle:type==="actual"?"Pareja actual":"Ex pareja",subColor:type==="actual"?T.green:T.label3})),
+    ...children.map(c=>({person:c,subtitle:childRole(c),subColor:T.label3}))
+  ];
+
+  return (<>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 20px 4px"}}>
+      <button onClick={onClose} style={{background:"none",border:"none",color:T.blue,fontSize:17,fontFamily:SF,cursor:"pointer"}}>Cerrar</button>
+      <div style={{width:60}}/>
+    </div>
+    <div style={{padding:"0 20px 32px",display:"flex",flexDirection:"column",gap:20}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,paddingTop:4,paddingBottom:4}}>
+        <Av photo={m.photo} name={fullName(m)} size={120} gender={m.gender} deceased={m.deceased}/>
+        <div style={{textAlign:"center"}}>
+          <div style={{color:m.deceased?T.label2:T.label,fontSize:26,fontWeight:700,fontFamily:SF,letterSpacing:-.3,lineHeight:1.15}}>
+            {m.deceased&&<span style={{marginRight:4,fontSize:18,opacity:.7}}>†</span>}{fn}
+          </div>
+          {ln&&<div style={{color:T.label2,fontSize:18,fontFamily:SF,fontWeight:400,marginTop:3}}>{ln}</div>}
+          {age!=null&&<div style={{color:T.label3,fontSize:14,fontFamily:SF,marginTop:5}}>{age} años</div>}
+        </div>
+      </div>
+
+      {infoItems.length>0&&<div>{ST("Información")}
+        <div style={card}>{infoItems.map((r,i)=><InfoRow key={r.label} label={r.label} value={r.value} isLast={i===infoItems.length-1}/>)}</div>
+      </div>}
+
+      {contactItems.length>0&&<div>{ST("Contacto")}
+        <div style={card}>{contactItems.map((r,i)=><InfoRow key={r.label} label={r.label} value={r.value} href={r.href} isLast={i===contactItems.length-1}/>)}</div>
+      </div>}
+
+      <div>{ST("Estado")}
+        <div style={card}>{statusItems.map((r,i)=><InfoRow key={r.label} label={r.label} value={r.value} isLast={i===statusItems.length-1}/>)}</div>
+      </div>
+
+      {familyEntries.length>0&&<div>{ST("Familia")}
+        <div style={card}>{familyEntries.map((e,i)=><PersonRow key={e.person.id} person={e.person} subtitle={e.subtitle} subColor={e.subColor} isLast={i===familyEntries.length-1}/>)}</div>
+      </div>}
+
+      <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
+        <button onClick={onEdit}
+          style={{width:"100%",padding:"15px 0",background:T.blue,border:"none",borderRadius:14,
+            color:"#fff",fontSize:17,fontWeight:600,fontFamily:SF,cursor:"pointer",
+            boxShadow:"0 4px 14px rgba(0,122,255,0.3)"}}>Editar</button>
+        <button onClick={onRemove}
+          style={{width:"100%",padding:"15px 0",background:"rgba(255,59,48,0.1)",border:"none",borderRadius:14,
+            color:T.pink,fontSize:17,fontWeight:600,fontFamily:SF,cursor:"pointer"}}>Eliminar</button>
+      </div>
+    </div>
+  </>);
+}
+
 function App(){
   const [members,setMembers]=useState([]);
   const [sel,setSel]=useState(null);
@@ -578,7 +678,7 @@ function App(){
         <div style={{width:1400*zoom,height:1000*zoom,flexShrink:0}}>
           <svg width="1400" height="1000" onClick={()=>setSel(null)} style={{transform:`scale(${zoom})`,transformOrigin:"top left",display:"block"}}>
             <Lines members={members}/>
-            {members.map(m=><Node key={m.id} m={m} sel={sel} onSel={setSel} onDrag={drag} zoom={zoom}/>)}
+            {members.map(m=><Node key={m.id} m={m} sel={sel} onSel={id=>{setSel(id);setPanel("profile");}} onDrag={drag} zoom={zoom}/>)}
           </svg>
         </div>
       </div>
@@ -623,6 +723,11 @@ function App(){
           <div style={{display:"flex",justifyContent:"center",padding:"10px 0 2px"}}>
             <div style={{width:36,height:5,borderRadius:3,background:"rgba(60,60,67,0.15)"}}/>
           </div>
+
+          {panel==="profile"&&selM&&<ProfileSheet m={selM} members={members}
+            onClose={()=>setPanel(null)}
+            onEdit={openEdit}
+            onRemove={remove}/>}
 
           {(panel==="add"||panel==="edit")&&<>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 20px 10px"}}>
