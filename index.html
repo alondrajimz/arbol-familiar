@@ -86,17 +86,26 @@ function autoLayout(members){
     });
   }
   members.forEach(m=>{if(gen[m.id]===undefined)gen[m.id]=0;});
-  // Step 2: equalize partner generations — partners always share the same row
+  // Step 2: partners share the same row (push to deeper gen with MAX),
+  // then re-propagate children so they stay below their parents. Repeat until stable.
   changed=true;
   while(changed){
     changed=false;
+    // 2a: equalize partners — both go to the numerically higher generation
     members.forEach(m=>{
       (m.partnerships||[]).forEach(pr=>{
         if(gen[pr.partnerId]===undefined)return;
-        const minG=Math.min(gen[m.id],gen[pr.partnerId]);
-        if(gen[m.id]!==minG){gen[m.id]=minG;changed=true;}
-        if(gen[pr.partnerId]!==minG){gen[pr.partnerId]=minG;changed=true;}
+        const maxG=Math.max(gen[m.id],gen[pr.partnerId]);
+        if(gen[m.id]!==maxG){gen[m.id]=maxG;changed=true;}
+        if(gen[pr.partnerId]!==maxG){gen[pr.partnerId]=maxG;changed=true;}
       });
+    });
+    // 2b: re-propagate children — child gen must be > both parents' gens
+    members.forEach(m=>{
+      const pgs=[m.parent1Id,m.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!==undefined);
+      if(!pgs.length)return;
+      const needed=Math.max(...pgs)+1;
+      if(gen[m.id]<needed){gen[m.id]=needed;changed=true;}
     });
   }
   const maxGen=Math.max(...Object.values(gen),0);
@@ -551,13 +560,13 @@ function App(){
                   <div style={rowStyle}>
                     <Sel value={form.parent1Id} onChange={e=>setForm({...form,parent1Id:e.target.value})}>
                       <option value="">Padre/Madre 1 — Ninguno</option>
-                      {members.filter(m=>m.id!==sel).map(m=><option key={m.id} value={m.id}>{fullName(m)}</option>)}
+                      {members.filter(m=>m.id!==sel&&(!form.birthDate||!m.birthDate||m.birthDate<form.birthDate)).map(m=><option key={m.id} value={m.id}>{fullName(m)}</option>)}
                     </Sel>
                   </div>
                   <div style={{...rowStyle,borderBottom:"none"}}>
                     <Sel value={form.parent2Id} onChange={e=>setForm({...form,parent2Id:e.target.value})}>
                       <option value="">Padre/Madre 2 — Ninguno</option>
-                      {members.filter(m=>m.id!==sel&&m.id!==form.parent1Id).map(m=><option key={m.id} value={m.id}>{fullName(m)}</option>)}
+                      {members.filter(m=>m.id!==sel&&m.id!==form.parent1Id&&(!form.birthDate||!m.birthDate||m.birthDate<form.birthDate)).map(m=><option key={m.id} value={m.id}>{fullName(m)}</option>)}
                     </Sel>
                   </div>
                 </div>
