@@ -392,9 +392,16 @@ function ProfileSheet({m,members,onClose,onEdit,onRemove}){
   if(m.birthPlace)infoItems.push({label:"Lugar de nacimiento",value:m.birthPlace});
   if(m.residence)infoItems.push({label:"Residencia",value:m.residence});
 
-  const contactItems=[];
-  if(m.phone)contactItems.push({label:"Teléfono",value:m.phone,href:`tel:${m.phone}`});
-  if(m.email)contactItems.push({label:"Correo",value:m.email,href:`mailto:${m.email}`});
+  const socialHref=(val,base)=>!val?"":(val.startsWith("http")?val:`${base}/${val.replace(/^@/,"")}`);
+  const contactIcons=[];
+  if(m.phone)contactIcons.push({key:"phone",href:`tel:${m.phone}`,bg:"#34C759",
+    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10a19.79 19.79 0 01-3.07-8.67A2 2 0 012 .84h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>});
+  if(m.email)contactIcons.push({key:"email",href:`mailto:${m.email}`,bg:"#007AFF",
+    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2,7 12,14 22,7"/></svg>});
+  if(m.facebook)contactIcons.push({key:"fb",href:socialHref(m.facebook,"https://facebook.com"),bg:"#1877F2",
+    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg>});
+  if(m.instagram)contactIcons.push({key:"ig",href:socialHref(m.instagram,"https://instagram.com"),bg:"linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)",
+    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.2" fill="#fff" stroke="none"/></svg>});
 
   const statusItems=[{label:"Estado",value:m.deceased?"Fallecido/a":"Vivo/a"}];
   if(m.deceased&&m.deathDate)statusItems.push({label:"Fecha de fallecimiento",value:fmtDate(m.deathDate)});
@@ -428,8 +435,14 @@ function ProfileSheet({m,members,onClose,onEdit,onRemove}){
         <div style={card}>{infoItems.map((r,i)=><InfoRow key={r.label} label={r.label} value={r.value} isLast={i===infoItems.length-1}/>)}</div>
       </div>}
 
-      {contactItems.length>0&&<div>{ST("Contacto")}
-        <div style={card}>{contactItems.map((r,i)=><InfoRow key={r.label} label={r.label} value={r.value} href={r.href} isLast={i===contactItems.length-1}/>)}</div>
+      {contactIcons.length>0&&<div>{ST("Contacto")}
+        <div style={{display:"flex",gap:16,justifyContent:"center",padding:"12px 0"}}>
+          {contactIcons.map(({key,href,bg,icon})=>(
+            <a key={key} href={href} style={{width:44,height:44,borderRadius:22,background:bg,flexShrink:0,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              boxShadow:"0 2px 8px rgba(0,0,0,.18)",textDecoration:"none"}}>{icon}</a>
+          ))}
+        </div>
       </div>}
 
       <div>{ST("Estado")}
@@ -457,7 +470,7 @@ function App(){
   const [members,setMembers]=useState([]);
   const [sel,setSel]=useState(null);
   const [panel,setPanel]=useState(null);
-  const [form,setForm]=useState({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",residence:"",email:"",phone:"",parent1Id:"",parent2Id:"",photo:null});
+  const [form,setForm]=useState({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",residence:"",email:"",phone:"",facebook:"",instagram:"",parent1Id:"",parent2Id:"",photo:null});
   const [loading,setLoading]=useState(true);
   const [toast,setToast]=useState(null);
   const [saving,setSaving]=useState(false);
@@ -569,14 +582,14 @@ function App(){
   const selM=members.find(m=>m.id===sel);
   const selPartnerships=selM?.partnerships||[];
 
-  const openAdd=()=>{setForm({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",residence:"",email:"",phone:"",parent1Id:sel||"",parent2Id:"",photo:null});setPanel("add");};
-  const openEdit=()=>{if(!selM)return;setForm({firstName:selM.firstName||"",lastName1:selM.lastName1||"",lastName2:selM.lastName2||"",birthDate:selM.birthDate||"",birthPlace:selM.birthPlace||"",gender:selM.gender,deceased:selM.deceased||false,deathDate:selM.deathDate||"",deathPlace:selM.deathPlace||"",residence:selM.residence||"",email:selM.email||"",phone:selM.phone||"",parent1Id:selM.parent1Id||"",parent2Id:selM.parent2Id||"",photo:selM.photo});setPanel("edit");};
+  const openAdd=()=>{setForm({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",residence:"",email:"",phone:"",facebook:"",instagram:"",parent1Id:sel||"",parent2Id:"",photo:null});setPanel("add");};
+  const openEdit=()=>{if(!selM)return;setForm({firstName:selM.firstName||"",lastName1:selM.lastName1||"",lastName2:selM.lastName2||"",birthDate:selM.birthDate||"",birthPlace:selM.birthPlace||"",gender:selM.gender,deceased:selM.deceased||false,deathDate:selM.deathDate||"",deathPlace:selM.deathPlace||"",residence:selM.residence||"",email:selM.email||"",phone:selM.phone||"",facebook:selM.facebook||"",instagram:selM.instagram||"",parent1Id:selM.parent1Id||"",parent2Id:selM.parent2Id||"",photo:selM.photo});setPanel("edit");};
   const openPartnerships=()=>{if(!selM)return;setPForm({partnerId:"",type:"actual"});setPanel("partnerships");};
 
   const save=()=>{
     if(!form.firstName.trim())return;
     const extra={deceased:form.deceased,deathDate:form.deceased?form.deathDate:"",deathPlace:form.deceased?form.deathPlace:"",
-      residence:form.residence,email:form.email,phone:form.phone};
+      residence:form.residence,email:form.email,phone:form.phone,facebook:form.facebook,instagram:form.instagram};
     let next;
     if(panel==="add"){
       const p1=members.find(m=>m.id===form.parent1Id);
@@ -774,7 +787,9 @@ function App(){
                 {secTitle("Contacto")}
                 <div style={{background:"#FFF",borderRadius:12,overflow:"hidden",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.04)"}}>
                   <div style={rowStyle}><Inp type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="Correo electrónico"/></div>
-                  <div style={{...rowStyle,borderBottom:"none"}}><Inp type="tel" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="Teléfono"/></div>
+                  <div style={rowStyle}><Inp type="tel" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="Teléfono"/></div>
+                  <div style={rowStyle}><Inp value={form.facebook} onChange={e=>setForm({...form,facebook:e.target.value})} placeholder="Facebook (URL o usuario)"/></div>
+                  <div style={{...rowStyle,borderBottom:"none"}}><Inp value={form.instagram} onChange={e=>setForm({...form,instagram:e.target.value})} placeholder="Instagram (URL o usuario)"/></div>
                 </div>
               </div>
               <div>
