@@ -76,8 +76,7 @@ function autoLayout(members){
   const byId={};
   members.forEach(m=>{byId[m.id]=m;});
 
-  // Step 1: Calculate generations
-  // 1a: BFS from roots (no parents = gen 0)
+  // PHASE A — BFS: gen 0 for roots, children = max(parent gens) + 1
   const gen={};
   members.forEach(m=>{if(!m.parent1Id&&!m.parent2Id)gen[m.id]=0;});
   let changed=true;
@@ -91,40 +90,41 @@ function autoLayout(members){
   }
   members.forEach(m=>{if(gen[m.id]===undefined)gen[m.id]=0;});
 
-  // Floor: minimum gen a person can occupy given their parents
-  const genFloor=id=>{
-    const m=byId[id];if(!m)return 0;
-    const pgs=[m.parent1Id,m.parent2Id].filter(Boolean).map(pid=>gen[pid]).filter(g=>g!==undefined);
-    return pgs.length?Math.max(...pgs)+1:0;
-  };
-
-  // 1b: Equalize — partners → same gen (MIN, respecting floor); siblings → same gen (MAX); re-propagate
-  changed=true;let iters=0;
-  while(changed&&iters++<100){
+  // PHASE B — Pull up: partners→MIN gen (REGLA 1), siblings→MIN gen (REGLA 2)
+  // Only decreases values → bounded by 0 → guaranteed convergence, no oscillation
+  changed=true;
+  while(changed){
     changed=false;
+    // REGLA 1: partners always same generation — both go to the lower of the two
     members.forEach(m=>{
       (m.partnerships||[]).forEach(pr=>{
         const pid=pr.partnerId;
         if(gen[pid]===undefined)return;
         const minG=Math.min(gen[m.id],gen[pid]);
-        const flM=genFloor(m.id),flP=genFloor(pid);
-        if(minG>=flM&&minG>=flP){
-          if(gen[m.id]!==minG){gen[m.id]=minG;changed=true;}
-          if(gen[pid]!==minG){gen[pid]=minG;changed=true;}
-        }
+        if(gen[m.id]!==minG){gen[m.id]=minG;changed=true;}
+        if(gen[pid]!==minG){gen[pid]=minG;changed=true;}
       });
     });
+    // REGLA 2: siblings (share ≥1 parent) always same generation — all go to the lowest of the group
     const sibGroups={};
     members.forEach(m=>{
-      const key=[m.parent1Id,m.parent2Id].filter(Boolean).sort().join('|');
-      if(!key)return;
-      if(!sibGroups[key])sibGroups[key]=[];
-      sibGroups[key].push(m.id);
+      [m.parent1Id,m.parent2Id].filter(Boolean).forEach(pid=>{
+        if(!sibGroups[pid])sibGroups[pid]=[];
+        if(!sibGroups[pid].includes(m.id))sibGroups[pid].push(m.id);
+      });
     });
     Object.values(sibGroups).forEach(ids=>{
-      const maxG=Math.max(...ids.map(id=>gen[id]??0));
-      ids.forEach(id=>{if((gen[id]??0)!==maxG){gen[id]=maxG;changed=true;}});
+      if(ids.length<2)return;
+      const minG=Math.min(...ids.map(id=>gen[id]));
+      ids.forEach(id=>{if(gen[id]!==minG){gen[id]=minG;changed=true;}});
     });
+  }
+
+  // PHASE C — Push down: enforce REGLA 3 (child strictly below every parent)
+  // Only increases values → guaranteed convergence
+  changed=true;
+  while(changed){
+    changed=false;
     members.forEach(m=>{
       const pgs=[m.parent1Id,m.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!==undefined);
       if(!pgs.length)return;
@@ -133,7 +133,7 @@ function autoLayout(members){
     });
   }
 
-  // Step 2 & 3: Positions — Y from generation, X bottom-up
+  // PHASE D — Positions: Y from generation, X bottom-up
   const XGAP=170,YGAP=200,YTOP=80,PAD=100;
   const maxGen=Math.max(...Object.values(gen),0);
   const pos={};
