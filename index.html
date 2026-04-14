@@ -3,41 +3,206 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Mi Familia">
 <title>Mi Familia - Árbol Genealógico</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌳</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyBW0CvCK4bS4BOwApcGyPXqcDRrvFm7w7Y",
+  authDomain:"arbol-familiar-26.firebaseapp.com",
+  databaseURL:"https://arbol-familiar-26-default-rtdb.firebaseio.com",
+  projectId:"arbol-familiar-26",
+  storageBucket:"arbol-familiar-26.firebasestorage.app",
+  messagingSenderId:"671444673579",
+  appId:"1:671444673579:web:78f637bb24adce2b28b66e"
+});
+const dbRef = firebase.database().ref("familyTree");
+</script>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  html,body,#root{width:100%;height:100%;overflow:hidden}
-  body{font-family:'SF Pro Rounded','SF Pro Display',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:#F2F2F7}
-  input,select,button{font-family:inherit}
-  ::-webkit-scrollbar{width:6px;height:6px}
-  ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:3px}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body,#root{width:100%;height:100%;overflow:hidden}
+body{font-family:'SF Pro Rounded','SF Pro Display',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:#F2F2F7}
+input,select,button{font-family:inherit}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:3px}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
 const {useState,useCallback,useRef,useEffect}=React;
-
 const SF="'SF Pro Rounded','SF Pro Display',-apple-system,BlinkMacSystemFont,system-ui,sans-serif";
 const blur="saturate(180%) blur(20px)";
 const T={bg:"#F2F2F7",card:"rgba(255,255,255,0.88)",barBg:"rgba(249,249,249,0.78)",
   fill:"rgba(120,120,128,0.12)",label:"#000",label2:"rgba(60,60,67,0.6)",label3:"rgba(60,60,67,0.3)",
   blue:"#007AFF",pink:"#FF3B30",orange:"#FF9500",green:"#34C759",sep:"rgba(60,60,67,0.12)"};
 
-const STORAGE_KEY="family-tree-v2";
-function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function fmtDate(d){if(!d)return"";if(/^\d{4}-\d{2}-\d{2}$/.test(d)){const[y,mo,day]=d.split("-");return`${day}/${mo}/${y}`;}return d;}
+function calcAge(birthDate,deathDate,deceased){
+  if(!birthDate)return null;
+  const birth=new Date(birthDate);if(isNaN(birth.getTime()))return null;
+  const ref=deceased&&deathDate?new Date(deathDate):new Date();
+  let age=ref.getFullYear()-birth.getFullYear();
+  const mo=ref.getMonth()-birth.getMonth();
+  if(mo<0||(mo===0&&ref.getDate()<birth.getDate()))age--;
+  return age>=0?age:null;
+}
+function fullName(m){return[m.firstName,m.lastName1,m.lastName2].filter(Boolean).join(" ")||m.name||"";}
 
-function loadData(){try{const d=localStorage.getItem(STORAGE_KEY);if(d){const p=JSON.parse(d);if(Array.isArray(p)&&p.length>0)return p;}}catch(e){}return null;}
-function saveData(data){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(e){}}
+// Photo localStorage helpers
+const PHOTO_KEY="familyPhotos";
+function savePhotosLocally(members){
+  const photos={};
+  members.forEach(m=>{if(m.photo)photos[m.id]=m.photo;});
+  localStorage.setItem(PHOTO_KEY,JSON.stringify(photos));
+}
+function loadPhotosLocally(){
+  try{return JSON.parse(localStorage.getItem(PHOTO_KEY)||"{}");}catch{return{};}
+}
 
-function fmtDate(d){
-  if(!d)return"";
-  if(/^\d{4}-\d{2}-\d{2}$/.test(d)){const[y,mo,day]=d.split("-");return`${day}/${mo}/${y}`;}
-  return d;
+function autoLayout(members){
+  if(!members.length)return members;
+  const byId={};
+  members.forEach(m=>{byId[m.id]=m;});
+
+  // PHASE A — BFS: gen 0 for roots, children = max(parent gens) + 1
+  const gen={};
+  members.forEach(m=>{if(!m.parent1Id&&!m.parent2Id)gen[m.id]=0;});
+  let changed=true;
+  while(changed){
+    changed=false;
+    members.forEach(m=>{
+      if(gen[m.id]!==undefined)return;
+      const pgs=[m.parent1Id,m.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!==undefined);
+      if(pgs.length){gen[m.id]=Math.max(...pgs)+1;changed=true;}
+    });
+  }
+  members.forEach(m=>{if(gen[m.id]===undefined)gen[m.id]=0;});
+
+  // PHASE B — Pull up: partners→MIN gen (REGLA 1), siblings→MIN gen (REGLA 2)
+  // Only decreases values → bounded by 0 → guaranteed convergence, no oscillation
+  changed=true;
+  while(changed){
+    changed=false;
+    // REGLA 1: partners always same generation — both go to the lower of the two
+    members.forEach(m=>{
+      (m.partnerships||[]).forEach(pr=>{
+        const pid=pr.partnerId;
+        if(gen[pid]===undefined)return;
+        const minG=Math.min(gen[m.id],gen[pid]);
+        if(gen[m.id]!==minG){gen[m.id]=minG;changed=true;}
+        if(gen[pid]!==minG){gen[pid]=minG;changed=true;}
+      });
+    });
+    // REGLA 2: siblings (share ≥1 parent) always same generation — all go to the lowest of the group
+    const sibGroups={};
+    members.forEach(m=>{
+      [m.parent1Id,m.parent2Id].filter(Boolean).forEach(pid=>{
+        if(!sibGroups[pid])sibGroups[pid]=[];
+        if(!sibGroups[pid].includes(m.id))sibGroups[pid].push(m.id);
+      });
+    });
+    Object.values(sibGroups).forEach(ids=>{
+      if(ids.length<2)return;
+      const minG=Math.min(...ids.map(id=>gen[id]));
+      ids.forEach(id=>{if(gen[id]!==minG){gen[id]=minG;changed=true;}});
+    });
+  }
+
+  // PHASE C — Push down: enforce REGLA 3 (child strictly below every parent)
+  // Only increases values → guaranteed convergence
+  changed=true;
+  while(changed){
+    changed=false;
+    members.forEach(m=>{
+      const pgs=[m.parent1Id,m.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!==undefined);
+      if(!pgs.length)return;
+      const need=Math.max(...pgs)+1;
+      if(gen[m.id]<need){gen[m.id]=need;changed=true;}
+    });
+  }
+
+  // PHASE D — Positions: Y from generation, X bottom-up
+  const XGAP=170,YGAP=200,YTOP=80,PAD=100;
+  const maxGen=Math.max(...Object.values(gen),0);
+  const pos={};
+
+  // Parent → children map
+  const childrenOf={};
+  members.forEach(m=>{
+    [m.parent1Id,m.parent2Id].filter(Boolean).forEach(pid=>{
+      if(!childrenOf[pid])childrenOf[pid]=new Set();
+      childrenOf[pid].add(m.id);
+    });
+  });
+
+  for(let g=maxGen;g>=0;g--){
+    // Sort members at this gen by birthDate (siblings ordered correctly)
+    const gMembers=members.filter(m=>gen[m.id]===g)
+      .sort((a,b)=>(a.birthDate&&b.birthDate)?a.birthDate.localeCompare(b.birthDate):0);
+    if(!gMembers.length)continue;
+
+    // Build placement units: couple (man left, woman right) or single
+    const placed=new Set();
+    const units=[];
+    gMembers.forEach(m=>{
+      if(placed.has(m.id))return;
+      placed.add(m.id);
+      const partnerPr=(m.partnerships||[]).find(pr=>gen[pr.partnerId]===g&&!placed.has(pr.partnerId));
+      if(partnerPr){
+        const pm=byId[partnerPr.partnerId];
+        placed.add(pm.id);
+        const mLeft=(m.gender==='M'||(m.gender!=='F'&&pm.gender==='F'));
+        units.push({ids:mLeft?[m.id,pm.id]:[pm.id,m.id]});
+      }else{
+        units.push({ids:[m.id]});
+      }
+    });
+
+    // Hint = avg x of all children already positioned below this unit
+    units.forEach(u=>{
+      const xs=[];
+      u.ids.forEach(id=>{(childrenOf[id]||new Set()).forEach(cid=>{if(pos[cid])xs.push(pos[cid].x);});});
+      u.hint=xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null;
+    });
+
+    // Sort units by hint (leaf/unattached units go last)
+    units.sort((a,b)=>{
+      if(a.hint===null&&b.hint===null)return 0;
+      if(a.hint===null)return 1;if(b.hint===null)return -1;
+      return a.hint-b.hint;
+    });
+
+    // Assign x: center each unit on its hint, push right if collision (min XGAP between people)
+    let cursor=0;
+    units.forEach(u=>{
+      const w=(u.ids.length-1)*XGAP;
+      const ideal=u.hint!=null?u.hint-w/2:cursor;
+      const left=Math.max(ideal,cursor);
+      u.ids.forEach((uid,j)=>{pos[uid]={x:left+j*XGAP,y:YTOP+g*YGAP};});
+      cursor=left+w+XGAP;
+    });
+  }
+
+  // Step 4: Center tree — shift so leftmost node has PAD pixels of margin
+  const allXs=Object.values(pos).map(p=>p.x);
+  if(allXs.length){
+    const offset=PAD-Math.min(...allXs);
+    Object.keys(pos).forEach(id=>{pos[id]={...pos[id],x:pos[id].x+offset};});
+  }
+
+  return members.map(m=>pos[m.id]?{...m,...pos[m.id]}:m);
 }
 
 function Av({photo,name,size=44,gender,deceased}){
@@ -48,36 +213,32 @@ function Av({photo,name,size=44,gender,deceased}){
     display:"flex",alignItems:"center",justifyContent:"center",
     color:"#fff",fontSize:size*.36,fontWeight:600,fontFamily:SF,
     boxShadow:"0 1px 4px rgba(0,0,0,.12)",
-    filter:deceased?"grayscale(0.75)":"none",opacity:deceased?0.8:1}}>{!photo&&ini}</div>;
+    filter:deceased?"grayscale(0.85)":"none",opacity:deceased?0.8:1}}>{!photo&&ini}</div>;
 }
 
-function Node({m,sel,onSel,onDrag,zoom}){
-  const ref=useRef(null);const dr=useRef(false);const off=useRef({x:0,y:0});
-  const down=e=>{e.stopPropagation();dr.current=true;off.current={x:e.clientX/zoom-m.x,y:e.clientY/zoom-m.y};ref.current?.setPointerCapture(e.pointerId);};
-  const move=e=>{if(dr.current)onDrag(m.id,e.clientX/zoom-off.current.x,e.clientY/zoom-off.current.y);};
-  const up=e=>{dr.current=false;ref.current?.releasePointerCapture(e.pointerId);};
+function Node({m,sel,onSel}){
   const isSel=sel===m.id;
-  const sub=[fmtDate(m.birthDate),m.birthPlace].filter(Boolean).join(" · ");
-  const pCount=(m.partnerships||[]).length;
-
+  const age=calcAge(m.birthDate,m.deathDate,m.deceased);
+  const fn=m.firstName||(m.name||"").split(" ")[0]||"";
+  const ln=[m.lastName1,m.lastName2].filter(Boolean).join(" ")||((m.name||"").split(" ").slice(1).join(" "))||"";
+  const ring=isSel?`0 0 0 3px ${T.blue},0 2px 16px rgba(0,122,255,0.3)`:
+             m.deceased?"0 0 0 2.5px #aaa":"0 1px 8px rgba(0,0,0,0.13)";
   return (
-    <foreignObject x={m.x-80} y={m.y-44} width={160} height={88}>
-      <div ref={ref} onPointerDown={down} onPointerMove={move} onPointerUp={up}
-        onClick={e=>{e.stopPropagation();onSel(m.id);}}
-        style={{width:160,height:88,borderRadius:20,
-          background:isSel?"rgba(0,122,255,0.08)":m.deceased?"rgba(120,120,128,0.08)":T.card,
-          backdropFilter:blur,WebkitBackdropFilter:blur,
-          border:isSel?"2px solid rgba(0,122,255,0.4)":`0.5px solid ${T.sep}`,
-          display:"flex",alignItems:"center",gap:10,padding:"0 12px",
-          cursor:"grab",transition:"all .2s",boxSizing:"border-box",
-          boxShadow:isSel?"0 2px 12px rgba(0,122,255,0.15)":"0 1px 4px rgba(0,0,0,0.06)"}}>
-        <Av photo={m.photo} name={m.name} size={44} gender={m.gender} deceased={m.deceased}/>
-        <div style={{minWidth:0,flex:1}}>
-          <div style={{color:m.deceased?T.label2:T.label,fontSize:13.5,fontWeight:600,fontFamily:SF,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-            {m.deceased&&<span style={{marginRight:2,fontSize:11}}>†</span>}{m.name}
+    <foreignObject x={m.x-70} y={m.y-45} width={140} height={148}>
+      <div onClick={e=>{e.stopPropagation();onSel(m.id);}}
+        style={{width:140,paddingTop:5,display:"flex",flexDirection:"column",
+          alignItems:"center",gap:4,cursor:"pointer",userSelect:"none",boxSizing:"border-box"}}>
+        <div style={{borderRadius:"50%",flexShrink:0,boxShadow:ring}}>
+          <Av photo={m.photo} name={fullName(m)} size={80} gender={m.gender} deceased={m.deceased}/>
+        </div>
+        <div style={{width:"100%",textAlign:"center",marginTop:2}}>
+          <div style={{color:m.deceased?"#888":T.label,fontSize:13,fontWeight:700,fontFamily:SF,
+            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:"1.3"}}>
+            {m.deceased&&<span style={{marginRight:2}}>†</span>}{fn}
           </div>
-          {sub&&<div style={{color:T.label3,fontSize:10,fontFamily:SF,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub}</div>}
-          {pCount>1&&<div style={{color:T.label2,fontSize:9.5,fontFamily:SF,marginTop:1}}>{pCount} parejas</div>}
+          {ln&&<div style={{color:T.label2,fontSize:11,fontWeight:500,fontFamily:SF,
+            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:"1.3"}}>{ln}</div>}
+          {age!=null&&<div style={{color:T.label3,fontSize:11,fontFamily:SF,marginTop:1}}>{age} años</div>}
         </div>
       </div>
     </foreignObject>
@@ -85,39 +246,78 @@ function Node({m,sel,onSel,onDrag,zoom}){
 }
 
 function Lines({members}){
-  const p=[];const drawn=new Set();
+  const segs=[];
+  const byId={};
+  members.forEach(m=>{byId[m.id]=m;});
+  const drawn=new Set();
+  const LC="#ccc",LW=2;
+
+  // Partner lines: straight horizontal between avatar edges
   members.forEach(m=>{
     (m.partnerships||[]).forEach(pr=>{
       const key=[m.id,pr.partnerId].sort().join("-");
       if(drawn.has(key))return;drawn.add(key);
-      const sp=members.find(x=>x.id===pr.partnerId);if(!sp)return;
+      const sp=byId[pr.partnerId];if(!sp)return;
+      if(Math.abs(m.y-sp.y)>2)return;
       const isEx=pr.type==="anterior";
-      p.push(<line key={`p-${key}`} x1={m.x+80} y1={m.y} x2={sp.x-80} y2={sp.y}
-        stroke={isEx?"rgba(160,160,170,0.3)":"rgba(255,45,85,0.25)"} strokeWidth={isEx?1:1.3}
-        strokeDasharray={isEx?"5 4":"none"}/>);
-      const mx=(m.x+sp.x)/2,my=(m.y+sp.y)/2;
-      p.push(<text key={`pl-${key}`} x={mx} y={my-6} textAnchor="middle"
-        fill={isEx?"rgba(160,160,170,0.5)":"rgba(255,45,85,0.4)"} fontSize={9} fontFamily={SF}>{isEx?"ex":"♥"}</text>);
+      const x1=Math.min(m.x,sp.x)+40,x2=Math.max(m.x,sp.x)-40;
+      if(x1>=x2)return;
+      segs.push(<line key={`prt-${key}`} x1={x1} y1={m.y} x2={x2} y2={m.y}
+        stroke={isEx?"#ddd":LC} strokeWidth={LW} strokeDasharray={isEx?"8 5":"none"}/>);
     });
   });
+
+  // Parent-child organigram connectors grouped by family
+  const families={};
   members.forEach(m=>{
-    const p1=m.parent1Id?members.find(x=>x.id===m.parent1Id):null;
-    const p2=m.parent2Id?members.find(x=>x.id===m.parent2Id):null;
-    let fx,fy;
-    if(p1&&p2){fx=(p1.x+p2.x)/2;fy=Math.max(p1.y,p2.y)+44;}
-    else if(p1){fx=p1.x;fy=p1.y+44;}
-    else if(p2){fx=p2.x;fy=p2.y+44;}
-    else return;
-    const tx=m.x,ty=m.y-44,my2=(fy+ty)/2;
-    p.push(<path key={`c-${m.id}`} d={`M${fx},${fy} C${fx},${my2} ${tx},${my2} ${tx},${ty}`}
-      stroke="rgba(0,122,255,0.2)" strokeWidth={1.5} fill="none"/>);
+    if(!m.parent1Id&&!m.parent2Id)return;
+    const key=[m.parent1Id||"_",m.parent2Id||"_"].sort().join("|");
+    if(!families[key])families[key]={p1Id:m.parent1Id,p2Id:m.parent2Id,children:[]};
+    families[key].children.push(m);
   });
-  return <>{p}</>;
+
+  Object.values(families).forEach(({p1Id,p2Id,children})=>{
+    const p1=p1Id?byId[p1Id]:null;
+    const p2=p2Id?byId[p2Id]:null;
+    if(!children.length)return;
+    const px=p1&&p2?(p1.x+p2.x)/2:p1?p1.x:p2.x;
+    const py=p1?p1.y:p2.y;
+    const childY=children[0].y;
+    const exitY=py+40;
+    const entryY=childY-42;
+    const yBar=(exitY+entryY)/2;
+    const xs=children.map(c=>c.x);
+    const minX=Math.min(...xs),maxX=Math.max(...xs);
+    const barX1=Math.min(px,minX),barX2=Math.max(px,maxX);
+    const fk=`${p1Id||""}-${p2Id||""}`;
+    segs.push(<line key={`v1-${fk}`} x1={px} y1={exitY} x2={px} y2={yBar} stroke={LC} strokeWidth={LW}/>);
+    segs.push(<line key={`bar-${fk}`} x1={barX1} y1={yBar} x2={barX2} y2={yBar} stroke={LC} strokeWidth={LW}/>);
+    children.forEach(c=>{
+      segs.push(<line key={`v2-${c.id}`} x1={c.x} y1={yBar} x2={c.x} y2={entryY} stroke={LC} strokeWidth={LW}/>);
+    });
+  });
+
+  return <>{segs}</>;
 }
 
 function PhotoUp({photo,gender,name,onUp}){
   const inp=useRef(null);
-  const go=e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=ev=>onUp(ev.target.result);r.readAsDataURL(f);};
+  const go=e=>{const f=e.target.files?.[0];if(!f)return;
+    // Compress image to avoid Firebase size issues
+    const img=new Image();const reader=new FileReader();
+    reader.onload=ev=>{
+      img.onload=()=>{
+        const canvas=document.createElement("canvas");
+        const max=200;let w=img.width,h=img.height;
+        if(w>h){if(w>max){h=h*(max/w);w=max;}}else{if(h>max){w=w*(max/h);h=max;}}
+        canvas.width=w;canvas.height=h;
+        canvas.getContext("2d").drawImage(img,0,0,w,h);
+        onUp(canvas.toDataURL("image/jpeg",0.7));
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(f);
+  };
   return (
     <div onClick={()=>inp.current?.click()} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,cursor:"pointer",padding:8}}>
       <div style={{position:"relative"}}>
@@ -156,75 +356,260 @@ function Sel({value,onChange,children}){
 }
 function DatePick({value,onChange}){
   return <input type="date" value={value} onChange={onChange}
-    style={{background:"transparent",border:"none",color:value?T.label:T.label3,
-      fontSize:15,fontFamily:SF,outline:"none",cursor:"pointer",flex:1,textAlign:"right"}}/>;
+    style={{flex:1,background:"transparent",border:"none",color:value?T.label:T.label3,
+      fontSize:15,fontFamily:SF,outline:"none",cursor:"pointer",textAlign:"right"}}/>;
+}
+
+function ProfileSheet({m,members,onClose,onEdit,onRemove}){
+  const age=calcAge(m.birthDate,m.deathDate,m.deceased);
+  const fn=m.firstName||(m.name||"").split(" ")[0]||"";
+  const ln=[m.lastName1,m.lastName2].filter(Boolean).join(" ")||((m.name||"").split(" ").slice(1).join(" "))||"";
+  const parent1=m.parent1Id?members.find(x=>x.id===m.parent1Id):null;
+  const parent2=m.parent2Id?members.find(x=>x.id===m.parent2Id):null;
+  const partners=(m.partnerships||[]).map(pr=>{const p=members.find(x=>x.id===pr.partnerId);return p?{p,type:pr.type}:null;}).filter(Boolean);
+  const children=members.filter(x=>x.parent1Id===m.id||x.parent2Id===m.id);
+
+  const ST=t=><div style={{color:T.label2,fontSize:12,fontWeight:500,fontFamily:SF,paddingLeft:4,marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>{t}</div>;
+  const card={background:"#FFF",borderRadius:12,overflow:"hidden",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.04)"};
+  const rowSep={borderBottom:`0.5px solid ${T.sep}`};
+
+  const InfoRow=({label,value,isLast,href})=>(
+    <div style={{padding:"11px 16px",...(isLast?{}:rowSep),display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+      <span style={{color:T.label2,fontSize:15,fontFamily:SF,flexShrink:0}}>{label}</span>
+      {href
+        ?<a href={href} style={{color:T.blue,fontSize:15,fontFamily:SF,textDecoration:"none",textAlign:"right"}}>{value}</a>
+        :<span style={{color:T.label,fontSize:15,fontFamily:SF,textAlign:"right",flex:1}}>{value}</span>}
+    </div>
+  );
+  const PersonRow=({person,subtitle,subColor,isLast})=>(
+    <div style={{padding:"10px 16px",...(isLast?{}:rowSep),display:"flex",alignItems:"center",gap:10}}>
+      <Av photo={person.photo} name={fullName(person)} size={36} gender={person.gender} deceased={person.deceased}/>
+      <div>
+        <div style={{color:T.label,fontSize:15,fontFamily:SF,fontWeight:500}}>{fullName(person)}</div>
+        <div style={{color:subColor||T.label3,fontSize:12,fontFamily:SF}}>{subtitle}</div>
+      </div>
+    </div>
+  );
+
+  const parentRole=p=>p.gender==="M"?"Padre":p.gender==="F"?"Madre":"Padre/Madre";
+  const childRole=c=>c.gender==="M"?"Hijo":c.gender==="F"?"Hija":"Hijo/a";
+
+  const infoItems=[];
+  if(m.birthDate)infoItems.push({label:"Nacimiento",value:fmtDate(m.birthDate)});
+  if(m.birthPlace)infoItems.push({label:"Lugar de nacimiento",value:m.birthPlace});
+  if(m.residence)infoItems.push({label:"Residencia",value:m.residence});
+
+  const socialHref=(val,base)=>!val?"":(val.startsWith("http")?val:`${base}/${val.replace(/^@/,"")}`);
+  const contactIcons=[];
+  if(m.phone)contactIcons.push({key:"phone",href:`tel:${m.phone}`,bg:"#34C759",
+    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10a19.79 19.79 0 01-3.07-8.67A2 2 0 012 .84h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>});
+  if(m.email)contactIcons.push({key:"email",href:`mailto:${m.email}`,bg:"#007AFF",
+    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2,7 12,14 22,7"/></svg>});
+  if(m.facebook)contactIcons.push({key:"fb",href:socialHref(m.facebook,"https://facebook.com"),bg:"#1877F2",
+    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg>});
+  if(m.instagram)contactIcons.push({key:"ig",href:socialHref(m.instagram,"https://instagram.com"),bg:"linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)",
+    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.2" fill="#fff" stroke="none"/></svg>});
+
+  const statusItems=[{label:"Estado",value:m.deceased?"Fallecido/a":"Vivo/a"}];
+  if(m.deceased&&m.deathDate)statusItems.push({label:"Fecha de fallecimiento",value:fmtDate(m.deathDate)});
+  if(m.deceased&&m.deathPlace)statusItems.push({label:"Lugar de descanso",value:m.deathPlace});
+
+  const familyEntries=[
+    ...(parent1?[{person:parent1,subtitle:parentRole(parent1),subColor:T.label3}]:[]),
+    ...(parent2?[{person:parent2,subtitle:parentRole(parent2),subColor:T.label3}]:[]),
+    ...partners.map(({p,type})=>({person:p,subtitle:type==="actual"?"Pareja actual":"Ex pareja",subColor:type==="actual"?T.green:T.label3})),
+    ...children.map(c=>({person:c,subtitle:childRole(c),subColor:T.label3}))
+  ];
+
+  return (<>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 20px 4px"}}>
+      <button onClick={onClose} style={{background:"none",border:"none",color:T.blue,fontSize:17,fontFamily:SF,cursor:"pointer"}}>Cerrar</button>
+      <div style={{width:60}}/>
+    </div>
+    <div style={{padding:"0 20px 32px",display:"flex",flexDirection:"column",gap:20}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,paddingTop:4,paddingBottom:4}}>
+        <Av photo={m.photo} name={fullName(m)} size={120} gender={m.gender} deceased={m.deceased}/>
+        <div style={{textAlign:"center"}}>
+          <div style={{color:m.deceased?T.label2:T.label,fontSize:26,fontWeight:700,fontFamily:SF,letterSpacing:-.3,lineHeight:1.15}}>
+            {m.deceased&&<span style={{marginRight:4,fontSize:18,opacity:.7}}>†</span>}{fn}
+          </div>
+          {ln&&<div style={{color:T.label2,fontSize:18,fontFamily:SF,fontWeight:400,marginTop:3}}>{ln}</div>}
+          {age!=null&&<div style={{color:T.label3,fontSize:14,fontFamily:SF,marginTop:5}}>{age} años</div>}
+        </div>
+      </div>
+
+      {infoItems.length>0&&<div>{ST("Información")}
+        <div style={card}>{infoItems.map((r,i)=><InfoRow key={r.label} label={r.label} value={r.value} isLast={i===infoItems.length-1}/>)}</div>
+      </div>}
+
+      {contactIcons.length>0&&<div>{ST("Contacto")}
+        <div style={{display:"flex",gap:16,justifyContent:"center",padding:"12px 0"}}>
+          {contactIcons.map(({key,href,bg,icon})=>(
+            <a key={key} href={href} style={{width:44,height:44,borderRadius:22,background:bg,flexShrink:0,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              boxShadow:"0 2px 8px rgba(0,0,0,.18)",textDecoration:"none"}}>{icon}</a>
+          ))}
+        </div>
+      </div>}
+
+      <div>{ST("Estado")}
+        <div style={card}>{statusItems.map((r,i)=><InfoRow key={r.label} label={r.label} value={r.value} isLast={i===statusItems.length-1}/>)}</div>
+      </div>
+
+      {familyEntries.length>0&&<div>{ST("Familia")}
+        <div style={card}>{familyEntries.map((e,i)=><PersonRow key={e.person.id} person={e.person} subtitle={e.subtitle} subColor={e.subColor} isLast={i===familyEntries.length-1}/>)}</div>
+      </div>}
+
+      <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:4}}>
+        <button onClick={onEdit}
+          style={{width:"100%",padding:"15px 0",background:T.blue,border:"none",borderRadius:14,
+            color:"#fff",fontSize:17,fontWeight:600,fontFamily:SF,cursor:"pointer",
+            boxShadow:"0 4px 14px rgba(0,122,255,0.3)"}}>Editar</button>
+        <button onClick={onRemove}
+          style={{width:"100%",padding:"15px 0",background:"rgba(255,59,48,0.1)",border:"none",borderRadius:14,
+            color:T.pink,fontSize:17,fontWeight:600,fontFamily:SF,cursor:"pointer"}}>Eliminar</button>
+      </div>
+    </div>
+  </>);
 }
 
 function App(){
-  const [members,setMembers]=useState(()=>{
-    const saved=loadData();
-    return saved||[
-      {id:genId(),name:"Abuelo",birthDate:"15/06/1940",birthPlace:"Guadalajara",gender:"M",partnerships:[],parent1Id:null,parent2Id:null,photo:null,x:360,y:60},
-      {id:genId(),name:"Abuela",birthDate:"22/11/1943",birthPlace:"Mérida",gender:"F",partnerships:[],parent1Id:null,parent2Id:null,photo:null,x:580,y:60},
-    ];
-  });
+  const [members,setMembers]=useState([]);
   const [sel,setSel]=useState(null);
   const [panel,setPanel]=useState(null);
-  const [form,setForm]=useState({name:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",residence:"",email:"",phone:"",parent1Id:"",parent2Id:"",photo:null});
+  const [form,setForm]=useState({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",residence:"",email:"",phone:"",facebook:"",instagram:"",parent1Id:"",parent2Id:"",photo:null});
+  const [loading,setLoading]=useState(true);
   const [toast,setToast]=useState(null);
+  const [saving,setSaving]=useState(false);
+  const [zoom,setZoom]=useState(1);
   const [pForm,setPForm]=useState({partnerId:"",type:"actual"});
-  const [zoom,setZoom]=useState(0.8);
-  const saveTimer=useRef(null);
-  const canvasRef=useRef(null);
+  const isLocalUpdate=useRef(false);
+  const autoSaveTimer=useRef(null);
+  const containerRef=useRef(null);
+  const pinchRef=useRef(null);
+  const lastZoomRef=useRef(1);
+  const didAutoFit=useRef(false);
 
-  const fitToScreen=useCallback(()=>{
-    if(!members.length||!canvasRef.current)return;
-    const xs=members.map(m=>m.x),ys=members.map(m=>m.y);
-    const w=Math.max(...xs)-Math.min(...xs)+240,h=Math.max(...ys)-Math.min(...ys)+180;
-    const cw=canvasRef.current.clientWidth,ch=canvasRef.current.clientHeight;
-    setZoom(+Math.min(Math.max(Math.min(cw/w,ch/h),0.2),1.5).toFixed(2));
-  },[members]);
+  const persistToFirebase=(membersArr)=>{
+    isLocalUpdate.current=true;
+    const data={};
+    membersArr.forEach(m=>{const{photo,...rest}=m;data[m.id]=rest;});
+    dbRef.set(data)
+      .then(()=>{savePhotosLocally(membersArr);showToast("Guardado ✓");})
+      .catch(()=>{isLocalUpdate.current=false;showToast("Error al guardar, intenta de nuevo");});
+  };
 
+  const scheduleAutoSave=(membersArr)=>{
+    clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current=setTimeout(()=>persistToFirebase(membersArr),2000);
+  };
+
+  const showToast=(msg)=>{setToast(msg);setTimeout(()=>setToast(null),2400);};
+
+  // Listen to Firebase in realtime
   useEffect(()=>{
-    const el=canvasRef.current;if(!el)return;
-    const fn=e=>{e.preventDefault();setZoom(z=>+Math.min(2.5,Math.max(0.2,z+(e.deltaY>0?-0.1:0.1))).toFixed(2));};
-    el.addEventListener('wheel',fn,{passive:false});
-    return()=>el.removeEventListener('wheel',fn);
+    const unsub=dbRef.on("value",(snapshot)=>{
+      setLoading(false);
+      if(isLocalUpdate.current){isLocalUpdate.current=false;return;}
+      const val=snapshot.val();
+      if(val){
+        const photos=loadPhotosLocally();
+        const arr=Object.values(val).map(m=>{
+          let r={...m,partnerships:m.partnerships||[],photo:photos[m.id]||null};
+          if(!r.firstName&&r.name){
+            const p=r.name.trim().split(/\s+/);
+            r={...r,firstName:p[0]||"",lastName1:p[1]||"",lastName2:p[2]||""};
+          }
+          return r;
+        });
+        setMembers(arr);
+      }
+    });
+    return ()=>dbRef.off("value",unsub);
   },[]);
 
-  const showToast=(msg)=>{setToast(msg);setTimeout(()=>setToast(null),1800);};
+  const fitTree=()=>{
+    if(!members.length||!containerRef.current)return;
+    const xs=members.map(m=>m.x),ys=members.map(m=>m.y);
+    const minX=Math.min(...xs),maxX=Math.max(...xs);
+    const minY=Math.min(...ys),maxY=Math.max(...ys);
+    const treeW=maxX-minX+160,treeH=maxY-minY+120;
+    const cw=containerRef.current.clientWidth,ch=containerRef.current.clientHeight;
+    if(!cw||!ch)return;
+    const z=Math.min(2,Math.max(0.2,parseFloat(Math.min(cw/treeW,ch/treeH).toFixed(2))));
+    setZoom(z);
+    setTimeout(()=>{
+      if(!containerRef.current)return;
+      const cx=(minX+maxX)/2*z,cy=(minY+maxY)/2*z;
+      containerRef.current.scrollTo({left:Math.max(0,cx-cw/2),top:Math.max(0,cy-ch/2),behavior:"smooth"});
+    },50);
+  };
+
+  // Auto-fit on first load
+  useEffect(()=>{
+    if(!loading&&members.length&&!didAutoFit.current&&containerRef.current){
+      didAutoFit.current=true;
+      const xs=members.map(m=>m.x),ys=members.map(m=>m.y);
+      const minX=Math.min(...xs),maxX=Math.max(...xs);
+      const minY=Math.min(...ys),maxY=Math.max(...ys);
+      const treeW=maxX-minX+160,treeH=maxY-minY+120;
+      const cw=containerRef.current.clientWidth,ch=containerRef.current.clientHeight;
+      if(cw&&ch){
+        const z=Math.min(2,Math.max(0.2,parseFloat(Math.min(cw/treeW,ch/treeH).toFixed(2))));
+        setZoom(z);
+        setTimeout(()=>{
+          if(!containerRef.current)return;
+          const cx=(minX+maxX)/2*z,cy=(minY+maxY)/2*z;
+          containerRef.current.scrollTo({left:Math.max(0,cx-cw/2),top:Math.max(0,cy-ch/2),behavior:"smooth"});
+        },50);
+      }
+    }
+  },[loading,members]);
 
   const update=useCallback((fn)=>{
-    setMembers(prev=>{
-      const next=typeof fn==="function"?fn(prev):fn;
-      if(saveTimer.current)clearTimeout(saveTimer.current);
-      saveTimer.current=setTimeout(()=>{saveData(next);showToast("Guardado ✓");},1200);
-      return next;
-    });
+    setMembers(prev=>typeof fn==="function"?fn(prev):fn);
   },[]);
 
-  const drag=useCallback((id,x,y)=>update(p=>p.map(m=>m.id===id?{...m,x,y}:m)),[update]);
+  const saveAll=()=>{
+    if(saving)return;
+    clearTimeout(autoSaveTimer.current);
+    setSaving(true);
+    isLocalUpdate.current=true;
+    const data={};
+    members.forEach(m=>{const{photo,...rest}=m;data[m.id]=rest;});
+    dbRef.set(data)
+      .then(()=>{
+        savePhotosLocally(members);showToast("Guardado ✓");setSaving(false);
+        const laid=autoLayout(members);update(laid);scheduleAutoSave(laid);
+      })
+      .catch(()=>{isLocalUpdate.current=false;showToast("Error al guardar, intenta de nuevo");setSaving(false);});
+  };
+
   const selM=members.find(m=>m.id===sel);
   const selPartnerships=selM?.partnerships||[];
 
-  const openAdd=()=>{setForm({name:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",residence:"",email:"",phone:"",parent1Id:sel||"",parent2Id:"",photo:null});setPanel("add");};
-  const openEdit=()=>{if(!selM)return;setForm({name:selM.name,birthDate:selM.birthDate||"",birthPlace:selM.birthPlace||"",gender:selM.gender,deceased:selM.deceased||false,deathDate:selM.deathDate||"",residence:selM.residence||"",email:selM.email||"",phone:selM.phone||"",parent1Id:selM.parent1Id||"",parent2Id:selM.parent2Id||"",photo:selM.photo});setPanel("edit");};
+  const openAdd=()=>{setForm({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",residence:"",email:"",phone:"",facebook:"",instagram:"",parent1Id:sel||"",parent2Id:"",photo:null});setPanel("add");};
+  const openEdit=()=>{if(!selM)return;setForm({firstName:selM.firstName||"",lastName1:selM.lastName1||"",lastName2:selM.lastName2||"",birthDate:selM.birthDate||"",birthPlace:selM.birthPlace||"",gender:selM.gender,deceased:selM.deceased||false,deathDate:selM.deathDate||"",deathPlace:selM.deathPlace||"",residence:selM.residence||"",email:selM.email||"",phone:selM.phone||"",facebook:selM.facebook||"",instagram:selM.instagram||"",parent1Id:selM.parent1Id||"",parent2Id:selM.parent2Id||"",photo:selM.photo});setPanel("edit");};
   const openPartnerships=()=>{if(!selM)return;setPForm({partnerId:"",type:"actual"});setPanel("partnerships");};
 
   const save=()=>{
-    if(!form.name.trim())return;
-    const extra={deceased:form.deceased,deathDate:form.deceased?form.deathDate:"",
-      residence:form.residence,email:form.email,phone:form.phone};
+    if(!form.firstName.trim())return;
+    const extra={deceased:form.deceased,deathDate:form.deceased?form.deathDate:"",deathPlace:form.deceased?form.deathPlace:"",
+      residence:form.residence,email:form.email,phone:form.phone,facebook:form.facebook,instagram:form.instagram};
+    let next;
     if(panel==="add"){
       const p1=members.find(m=>m.id===form.parent1Id);
-      const n={id:genId(),name:form.name.trim(),birthDate:form.birthDate,birthPlace:form.birthPlace,gender:form.gender,
-        ...extra,parent1Id:form.parent1Id||null,parent2Id:form.parent2Id||null,partnerships:[],photo:form.photo,
-        x:p1?p1.x+(Math.random()-.5)*100:400,y:p1?p1.y+200:100};
-      update(p=>[...p,n]);
+      const n={id:genId(),firstName:form.firstName.trim(),lastName1:form.lastName1.trim(),lastName2:form.lastName2.trim(),
+        birthDate:form.birthDate,birthPlace:form.birthPlace,
+        gender:form.gender,...extra,parent1Id:form.parent1Id||null,parent2Id:form.parent2Id||null,
+        partnerships:[],photo:form.photo,x:p1?p1.x+(Math.random()-.5)*100:400,y:p1?p1.y+200:100};
+      next=[...members,n];
     } else if(sel){
-      update(p=>p.map(m=>m.id===sel?{...m,name:form.name.trim(),birthDate:form.birthDate,birthPlace:form.birthPlace,
-        gender:form.gender,...extra,parent1Id:form.parent1Id||null,parent2Id:form.parent2Id||null,photo:form.photo}:m));
+      next=members.map(m=>m.id===sel?{...m,firstName:form.firstName.trim(),lastName1:form.lastName1.trim(),lastName2:form.lastName2.trim(),
+        birthDate:form.birthDate,birthPlace:form.birthPlace,
+        gender:form.gender,...extra,parent1Id:form.parent1Id||null,parent2Id:form.parent2Id||null,photo:form.photo}:m);
     }
+    if(next){update(next);scheduleAutoSave(next);}
     setPanel(null);
   };
 
@@ -248,12 +633,17 @@ function App(){
   };
 
   const remove=()=>{
-    if(!sel||!confirm(`¿Eliminar a ${selM?.name}?`))return;
-    update(p=>p.filter(m=>m.id!==sel).map(m=>({...m,
-      parent1Id:m.parent1Id===sel?null:m.parent1Id,
-      parent2Id:m.parent2Id===sel?null:m.parent2Id,
-      partnerships:(m.partnerships||[]).filter(x=>x.partnerId!==sel)})));
+    if(!sel||!confirm("¿Eliminar a "+fullName(selM)+"?"))return;
+    const id=sel;
+    const updated=members
+      .filter(m=>m.id!==id)
+      .map(m=>({...m,
+        parent1Id:m.parent1Id===id?null:m.parent1Id,
+        parent2Id:m.parent2Id===id?null:m.parent2Id,
+        partnerships:(m.partnerships||[]).filter(x=>x.partnerId!==id)}));
+    update(updated);
     setSel(null);setPanel(null);
+    scheduleAutoSave(updated);
   };
 
   const pill=(label,color,action)=>(
@@ -267,6 +657,13 @@ function App(){
   const rowStyle={padding:"2px 16px",borderBottom:`0.5px solid ${T.sep}`};
   const secTitle=t=><div style={{color:T.label2,fontSize:12,fontWeight:500,fontFamily:SF,paddingLeft:4,marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>{t}</div>;
 
+  if(loading) return (
+    <div style={{width:"100%",height:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,fontFamily:SF}}>
+      <span style={{fontSize:48}}>🌳</span>
+      <span style={{color:T.label2,fontSize:16}}>Cargando árbol familiar…</span>
+    </div>
+  );
+
   return (
     <div style={{width:"100%",height:"100vh",background:T.bg,fontFamily:SF,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
 
@@ -275,12 +672,6 @@ function App(){
         fontSize:14,fontWeight:500,fontFamily:SF,boxShadow:"0 4px 16px rgba(0,0,0,.2)",
         animation:"fadeIn .25s ease"}}>{toast}</div>}
 
-      <style>{`
-        @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-        @keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-      `}</style>
-
-      {/* Top bar */}
       <div style={{padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",
         background:T.barBg,backdropFilter:blur,WebkitBackdropFilter:blur,
         borderBottom:`0.5px solid ${T.sep}`,zIndex:10}}>
@@ -299,28 +690,52 @@ function App(){
         </div>
       </div>
 
-      <div style={{padding:"6px 20px 4px",color:T.label3,fontSize:11.5,fontFamily:SF}}>
-        Arrastra para mover · Toca para seleccionar · Rueda del ratón para zoom · <span style={{color:T.blue}}>♥</span> pareja actual · <span style={{color:T.label3}}>- - -</span> ex pareja
+      <div ref={containerRef} style={{flex:1,overflow:"auto",background:T.bg}}
+        onTouchStart={e=>{if(e.touches.length===2){pinchRef.current=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);lastZoomRef.current=zoom;}}}
+        onTouchMove={e=>{if(e.touches.length===2&&pinchRef.current!=null){e.preventDefault();const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);setZoom(Math.min(2,Math.max(0.2,parseFloat((lastZoomRef.current*d/pinchRef.current).toFixed(2)))));}}}
+        onTouchEnd={()=>{pinchRef.current=null;}}>
+        {(()=>{
+          const svgW=members.length?Math.max(1400,Math.max(...members.map(m=>m.x))+140):1400;
+          const svgH=members.length?Math.max(600,Math.max(...members.map(m=>m.y))+140):600;
+          return <div style={{width:svgW*zoom,height:svgH*zoom,flexShrink:0}}>
+            <svg width={svgW} height={svgH} onClick={()=>setSel(null)} style={{transform:`scale(${zoom})`,transformOrigin:"top left",display:"block"}}>
+              <Lines members={members}/>
+              {members.map(m=><Node key={m.id} m={m} sel={sel} onSel={id=>{setSel(id);setPanel("profile");}}/>)}
+            </svg>
+          </div>;
+        })()}
       </div>
 
-      {/* Canvas */}
-      <div ref={canvasRef} style={{flex:1,overflow:"auto",background:T.bg,position:"relative"}}>
-        <div style={{width:1400*zoom,height:1000*zoom}}>
-          <svg width="1400" height="1000" onClick={()=>setSel(null)} style={{display:"block",transform:`scale(${zoom})`,transformOrigin:"top left"}}>
-            <Lines members={members}/>
-            {members.map(m=><Node key={m.id} m={m} sel={sel} onSel={setSel} onDrag={drag} zoom={zoom}/>)}
-          </svg>
-        </div>
-        {/* Zoom controls */}
-        <div style={{position:"fixed",bottom:24,right:24,zIndex:20,display:"flex",flexDirection:"column",gap:6,alignItems:"center"}}>
-          <button onClick={fitToScreen} style={{width:52,height:26,borderRadius:8,background:"rgba(255,255,255,0.92)",backdropFilter:blur,WebkitBackdropFilter:blur,border:`0.5px solid ${T.sep}`,color:T.blue,fontSize:11,fontWeight:600,fontFamily:SF,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.1)"}}>Ajustar</button>
-          <button onClick={()=>setZoom(z=>+Math.min(2.5,z+0.1).toFixed(2))} style={{width:44,height:44,borderRadius:12,background:"rgba(255,255,255,0.92)",backdropFilter:blur,WebkitBackdropFilter:blur,border:`0.5px solid ${T.sep}`,color:T.label,fontSize:26,fontWeight:300,fontFamily:SF,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.1)",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>+</button>
-          <div style={{width:44,height:26,borderRadius:8,background:"rgba(255,255,255,0.75)",border:`0.5px solid ${T.sep}`,color:T.label2,fontSize:11,fontWeight:500,fontFamily:SF,display:"flex",alignItems:"center",justifyContent:"center"}}>{Math.round(zoom*100)}%</div>
-          <button onClick={()=>setZoom(z=>+Math.max(0.2,z-0.1).toFixed(2))} style={{width:44,height:44,borderRadius:12,background:"rgba(255,255,255,0.92)",backdropFilter:blur,WebkitBackdropFilter:blur,border:`0.5px solid ${T.sep}`,color:T.label,fontSize:26,fontWeight:300,fontFamily:SF,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.1)",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>−</button>
-        </div>
-      </div>
+      {!panel&&<div style={{position:"fixed",bottom:28,left:24,zIndex:30,
+        background:"rgba(255,255,255,0.9)",backdropFilter:blur,WebkitBackdropFilter:blur,
+        borderRadius:16,border:`0.5px solid ${T.sep}`,overflow:"hidden",
+        boxShadow:"0 2px 12px rgba(0,0,0,.12)"}}>
+        <button onClick={()=>setZoom(z=>Math.min(2,parseFloat((z+0.25).toFixed(2))))}
+          style={{display:"block",width:"100%",height:42,background:"none",border:"none",cursor:"pointer",color:T.label,fontSize:24,fontWeight:300,fontFamily:SF}}>＋</button>
+        <div style={{height:"0.5px",background:T.sep}}/>
+        <button onClick={fitTree}
+          style={{display:"block",width:"100%",padding:"5px 14px",background:"none",border:"none",cursor:"pointer",color:T.label,fontSize:11,fontWeight:600,fontFamily:SF,whiteSpace:"nowrap"}}>Ajustar</button>
+        <div style={{height:"0.5px",background:T.sep}}/>
+        <button onClick={()=>setZoom(z=>Math.max(0.2,parseFloat((z-0.25).toFixed(2))))}
+          style={{display:"block",width:"100%",height:42,background:"none",border:"none",cursor:"pointer",color:T.label,fontSize:24,fontWeight:300,fontFamily:SF}}>−</button>
+      </div>}
 
-      {/* Bottom sheet */}
+      {!panel&&<button onClick={saveAll} disabled={saving}
+        style={{position:"fixed",bottom:28,right:24,zIndex:30,
+          padding:"0 28px",height:54,borderRadius:27,
+          background:T.blue,border:"none",cursor:saving?"default":"pointer",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+          boxShadow:"0 4px 24px rgba(0,122,255,0.45)",
+          transition:"transform .15s,opacity .15s",opacity:saving?0.82:1}}
+        onPointerDown={e=>{if(!saving)e.currentTarget.style.transform="scale(0.95)";}}
+        onPointerUp={e=>e.currentTarget.style.transform="scale(1)"}
+        onPointerLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+        {saving
+          ?<div style={{width:22,height:22,borderRadius:11,border:"2.5px solid rgba(255,255,255,0.35)",borderTopColor:"#fff",animation:"spin 0.75s linear infinite"}}/>
+          :<><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <span style={{color:"#fff",fontSize:17,fontWeight:600,fontFamily:SF,letterSpacing:-.2}}>Guardar cambios</span></>}
+      </button>}
+
       {panel&&<>
         <div onClick={()=>setPanel(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.3)",zIndex:50}}/>
         <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:60,
@@ -332,6 +747,11 @@ function App(){
             <div style={{width:36,height:5,borderRadius:3,background:"rgba(60,60,67,0.15)"}}/>
           </div>
 
+          {panel==="profile"&&selM&&<ProfileSheet m={selM} members={members}
+            onClose={()=>setPanel(null)}
+            onEdit={openEdit}
+            onRemove={remove}/>}
+
           {(panel==="add"||panel==="edit")&&<>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 20px 10px"}}>
               <button onClick={()=>setPanel(null)} style={{background:"none",border:"none",color:T.blue,fontSize:17,fontFamily:SF,cursor:"pointer"}}>Cancelar</button>
@@ -339,7 +759,7 @@ function App(){
               <button onClick={save} style={{background:"none",border:"none",color:T.blue,fontSize:17,fontWeight:600,fontFamily:SF,cursor:"pointer"}}>Listo</button>
             </div>
             <div style={{padding:"0 20px 28px",display:"flex",flexDirection:"column",gap:16}}>
-              <PhotoUp photo={form.photo} gender={form.gender} name={form.name} onUp={d=>setForm({...form,photo:d})}/>
+              <PhotoUp photo={form.photo} gender={form.gender} name={form.firstName} onUp={d=>setForm({...form,photo:d})}/>
               <Toggle value={form.gender} onChange={v=>setForm({...form,gender:v})}/>
               <Toggle value={form.deceased?"deceased":"alive"}
                 onChange={v=>setForm({...form,deceased:v==="deceased",deathDate:v==="alive"?"":form.deathDate})}
@@ -347,7 +767,9 @@ function App(){
               <div>
                 {secTitle("Información")}
                 <div style={{background:"#FFF",borderRadius:12,overflow:"hidden",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.04)"}}>
-                  <div style={rowStyle}><Inp value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Nombre completo"/></div>
+                  <div style={rowStyle}><Inp value={form.firstName} onChange={e=>setForm({...form,firstName:e.target.value})} placeholder="Nombre(s)  ej: Eva Judith"/></div>
+                  <div style={rowStyle}><Inp value={form.lastName1} onChange={e=>setForm({...form,lastName1:e.target.value})} placeholder="Apellido paterno"/></div>
+                  <div style={rowStyle}><Inp value={form.lastName2} onChange={e=>setForm({...form,lastName2:e.target.value})} placeholder="Apellido materno"/></div>
                   <div style={{...rowStyle,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                     <span style={{color:T.label3,fontSize:15,fontFamily:SF,flexShrink:0}}>Fecha de nacimiento</span>
                     <DatePick value={form.birthDate} onChange={e=>setForm({...form,birthDate:e.target.value})}/>
@@ -358,10 +780,11 @@ function App(){
               {form.deceased&&<div>
                 {secTitle("Fallecimiento")}
                 <div style={{background:"#FFF",borderRadius:12,overflow:"hidden",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.04)"}}>
-                  <div style={{...rowStyle,borderBottom:"none",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div style={{...rowStyle,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                     <span style={{color:T.label3,fontSize:15,fontFamily:SF,flexShrink:0}}>Fecha de fallecimiento</span>
                     <DatePick value={form.deathDate} onChange={e=>setForm({...form,deathDate:e.target.value})}/>
                   </div>
+                  <div style={{...rowStyle,borderBottom:"none"}}><Inp value={form.deathPlace} onChange={e=>setForm({...form,deathPlace:e.target.value})} placeholder="Lugar de fallecimiento"/></div>
                 </div>
               </div>}
               <div>
@@ -374,7 +797,9 @@ function App(){
                 {secTitle("Contacto")}
                 <div style={{background:"#FFF",borderRadius:12,overflow:"hidden",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.04)"}}>
                   <div style={rowStyle}><Inp type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="Correo electrónico"/></div>
-                  <div style={{...rowStyle,borderBottom:"none"}}><Inp type="tel" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="Teléfono"/></div>
+                  <div style={rowStyle}><Inp type="tel" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="Teléfono"/></div>
+                  <div style={rowStyle}><Inp value={form.facebook} onChange={e=>setForm({...form,facebook:e.target.value})} placeholder="Facebook (URL o usuario)"/></div>
+                  <div style={{...rowStyle,borderBottom:"none"}}><Inp value={form.instagram} onChange={e=>setForm({...form,instagram:e.target.value})} placeholder="Instagram (URL o usuario)"/></div>
                 </div>
               </div>
               <div>
@@ -383,18 +808,15 @@ function App(){
                   <div style={rowStyle}>
                     <Sel value={form.parent1Id} onChange={e=>setForm({...form,parent1Id:e.target.value})}>
                       <option value="">Padre/Madre 1 — Ninguno</option>
-                      {members.filter(m=>m.id!==sel).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+                      {members.filter(m=>m.id!==sel&&(!form.birthDate||!m.birthDate||m.birthDate<form.birthDate)).map(m=><option key={m.id} value={m.id}>{fullName(m)}</option>)}
                     </Sel>
                   </div>
                   <div style={{...rowStyle,borderBottom:"none"}}>
                     <Sel value={form.parent2Id} onChange={e=>setForm({...form,parent2Id:e.target.value})}>
                       <option value="">Padre/Madre 2 — Ninguno</option>
-                      {members.filter(m=>m.id!==sel&&m.id!==form.parent1Id).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+                      {members.filter(m=>m.id!==sel&&m.id!==form.parent1Id&&(!form.birthDate||!m.birthDate||m.birthDate<form.birthDate)).map(m=><option key={m.id} value={m.id}>{fullName(m)}</option>)}
                     </Sel>
                   </div>
-                </div>
-                <div style={{color:T.label3,fontSize:11,fontFamily:SF,paddingLeft:4,marginTop:6}}>
-                  Selecciona ambos padres para conectar correctamente a medios hermanos.
                 </div>
               </div>
             </div>
@@ -403,7 +825,7 @@ function App(){
           {panel==="partnerships"&&selM&&<>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 20px 10px"}}>
               <button onClick={()=>setPanel(null)} style={{background:"none",border:"none",color:T.blue,fontSize:17,fontFamily:SF,cursor:"pointer"}}>Cerrar</button>
-              <span style={{color:T.label,fontSize:17,fontWeight:600,fontFamily:SF}}>Parejas de {selM.name}</span>
+              <span style={{color:T.label,fontSize:17,fontWeight:600,fontFamily:SF}}>Parejas de {fullName(selM)}</span>
               <div style={{width:60}}/>
             </div>
             <div style={{padding:"0 20px 28px",display:"flex",flexDirection:"column",gap:16}}>
@@ -415,9 +837,9 @@ function App(){
                     return <div key={pr.partnerId} style={{...rowStyle,borderBottom:i<selPartnerships.length-1?`0.5px solid ${T.sep}`:"none",
                       display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px"}}>
                       <div style={{display:"flex",alignItems:"center",gap:10}}>
-                        <Av photo={partner.photo} name={partner.name} size={36} gender={partner.gender}/>
+                        <Av photo={partner.photo} name={fullName(partner)} size={36} gender={partner.gender}/>
                         <div>
-                          <div style={{color:T.label,fontSize:15,fontWeight:500,fontFamily:SF}}>{partner.name}</div>
+                          <div style={{color:T.label,fontSize:15,fontWeight:500,fontFamily:SF}}>{fullName(partner)}</div>
                           <div style={{color:pr.type==="actual"?T.green:T.label3,fontSize:12,fontFamily:SF,fontWeight:500}}>
                             {pr.type==="actual"?"Pareja actual":"Ex pareja"}</div>
                         </div>
@@ -428,7 +850,6 @@ function App(){
                   })}
                 </div>
               </div>}
-
               <div>
                 {secTitle("Agregar pareja")}
                 <div style={{background:"#FFF",borderRadius:12,overflow:"hidden",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.04)"}}>
@@ -436,7 +857,7 @@ function App(){
                     <Sel value={pForm.partnerId} onChange={e=>setPForm({...pForm,partnerId:e.target.value})}>
                       <option value="">Seleccionar persona…</option>
                       {members.filter(m=>m.id!==sel&&!selPartnerships.find(x=>x.partnerId===m.id)).map(m=>
-                        <option key={m.id} value={m.id}>{m.name}</option>)}
+                        <option key={m.id} value={m.id}>{fullName(m)}</option>)}
                     </Sel>
                   </div>
                   <div style={{...rowStyle,borderBottom:"none"}}>
@@ -453,10 +874,6 @@ function App(){
                   Agregar pareja
                 </button>
               </div>
-
-              <div style={{color:T.label3,fontSize:12,fontFamily:SF,padding:"0 4px",lineHeight:1.5}}>
-                Las parejas actuales se muestran con línea continua <span style={{color:T.pink}}>♥</span> y las ex parejas con línea punteada.
-              </div>
             </div>
           </>}
         </div>
@@ -464,7 +881,6 @@ function App(){
     </div>
   );
 }
-
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
