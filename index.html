@@ -53,20 +53,20 @@ function autoLayout(members){
   const by={};members.forEach(m=>by[m.id]=m);
   const gen={};
   members.forEach(m=>{if(!m.parent1Id&&!m.parent2Id)gen[m.id]=0;});
-  let chg=true;
-  while(chg){chg=false;members.forEach(m=>{
+  let chg=true,itr=0;
+  while(chg&&itr++<100){chg=false;members.forEach(m=>{
     if(gen[m.id]!=null)return;
     const gs=[m.parent1Id,m.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!=null);
     if(gs.length){gen[m.id]=Math.max(...gs)+1;chg=true;}
   });}
   members.forEach(m=>{if(gen[m.id]==null)gen[m.id]=0;});
-  chg=true;while(chg){chg=false;members.forEach(m=>(m.partnerships||[]).forEach(pr=>{
+  chg=true;itr=0;while(chg&&itr++<100){chg=false;members.forEach(m=>(m.partnerships||[]).forEach(pr=>{
     if(gen[pr.partnerId]==null)return;
     const g=Math.min(gen[m.id],gen[pr.partnerId]);
     if(gen[m.id]!==g){gen[m.id]=g;chg=true;}
     if(gen[pr.partnerId]!==g){gen[pr.partnerId]=g;chg=true;}
   }));}
-  chg=true;while(chg){chg=false;members.forEach(m=>{
+  chg=true;itr=0;while(chg&&itr++<100){chg=false;members.forEach(m=>{
     const gs=[m.parent1Id,m.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!=null);
     if(!gs.length)return;const n=Math.max(...gs)+1;
     if(gen[m.id]<n){gen[m.id]=n;chg=true;}
@@ -346,9 +346,11 @@ function App(){
   const onTouchMove=e=>{if(!touchRef.current||e.touches.length!==1)return;e.preventDefault();
     setPan({x:e.touches[0].clientX-touchRef.current.sx,y:e.touches[0].clientY-touchRef.current.sy});};
 
+  const safeLayout=ms=>{try{return autoLayout(ms);}catch(e){console.error("autoLayout error:",e);return ms.map((m,i)=>({...m,x:100+i*170,y:100}));}};
+
   const fit=()=>{
     if(!members.length)return;
-    const laid=autoLayout(members);
+    const laid=safeLayout(members);
     const xs=laid.map(m=>m.x),ys=laid.map(m=>m.y);
     const W=window.innerWidth,H=window.innerHeight-60;
     const z=Math.min(W/(Math.max(...xs)-Math.min(...xs)+160),(H)/(Math.max(...ys)-Math.min(...ys)+160),.95);
@@ -356,7 +358,7 @@ function App(){
     setZoom(z);setPan({x:W/2-cx*z,y:60+(H/2-cy*z)});
   };
 
-  const laid=autoLayout(members);
+  const laid=safeLayout(members);
   const W=window.innerWidth,H=window.innerHeight;
 
   return(
