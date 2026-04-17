@@ -12,412 +12,691 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script>
-firebase.initializeApp({apiKey:"AIzaSyBW0CvCK4bS4BOwApcGyPXqcDRrvFm7w7Y",authDomain:"arbol-familiar-26.firebaseapp.com",databaseURL:"https://arbol-familiar-26-default-rtdb.firebaseio.com",projectId:"arbol-familiar-26",storageBucket:"arbol-familiar-26.firebasestorage.app",messagingSenderId:"671444673579",appId:"1:671444673579:web:78f637bb24adce2b28b66e"});
-const db=firebase.database().ref("familyTree");
+firebase.initializeApp({
+  apiKey:"AIzaSyBW0CvCK4bS4BOwApcGyPXqcDRrvFm7w7Y",
+  authDomain:"arbol-familiar-26.firebaseapp.com",
+  databaseURL:"https://arbol-familiar-26-default-rtdb.firebaseio.com",
+  projectId:"arbol-familiar-26",
+  storageBucket:"arbol-familiar-26.firebasestorage.app",
+  messagingSenderId:"671444673579",
+  appId:"1:671444673579:web:78f637bb24adce2b28b66e"
+});
+const dbRef=firebase.database().ref("familyTree");
 </script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body,#root{width:100%;height:100%;overflow:hidden}
-body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Rounded',system-ui,sans-serif;background:#F2F2F7}
-input,select,button{font-family:inherit;font-size:16px}
-.sheet{position:fixed;bottom:0;left:0;right:0;background:#fff;border-radius:20px 20px 0 0;padding:20px;
-  max-height:88vh;overflow-y:auto;animation:sheetUp .28s ease;z-index:100;box-shadow:0 -4px 24px rgba(0,0,0,.18)}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:99}
-.f label{display:block;font-size:12px;color:#888;margin-bottom:4px}
-.f input,.f select{width:100%;padding:10px 12px;border:1.5px solid #e5e5e5;border-radius:10px;background:#fafafa;outline:none}
-.f input:focus,.f select:focus{border-color:#007AFF}
-.f{margin-bottom:11px}
-.btn{padding:11px 18px;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer}
-.blue{background:#007AFF;color:#fff}.red{background:#FF3B30;color:#fff}.gray{background:#f2f2f7;color:#333}
+body{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:#F2F2F7}
+input,select,button{font-family:inherit}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 @keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 </style>
 </head>
-<body><div id="root"></div>
+<body>
+<div id="root"></div>
 <script type="text/babel">
-const {useState,useEffect,useRef}=React;
+const {useState,useCallback,useRef,useEffect}=React;
 
-const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-const fmt=d=>{if(!d)return"";const[y,m,dd]=d.split("-");return`${dd}/${m}/${y}`;};
-function calcAge(b,d,dead){
-  if(!b)return null;const bd=new Date(b),ref=dead&&d?new Date(d):new Date();
-  let a=ref.getFullYear()-bd.getFullYear();
-  if(ref.getMonth()<bd.getMonth()||(ref.getMonth()===bd.getMonth()&&ref.getDate()<bd.getDate()))a--;
+/* ── helpers ── */
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function calcAge(birth,death){
+  if(!birth)return null;
+  const b=new Date(birth),d=death?new Date(death):new Date();
+  if(isNaN(b))return null;
+  let a=d.getFullYear()-b.getFullYear();
+  if(d.getMonth()<b.getMonth()||(d.getMonth()===b.getMonth()&&d.getDate()<b.getDate()))a--;
   return a>=0?a:null;
 }
-const PK="fp4";
-const savePhotos=map=>localStorage.setItem(PK,JSON.stringify(map));
-const getPhotos=()=>{try{return JSON.parse(localStorage.getItem(PK)||"{}");}catch{return{};}};
+function getDisplay(m){
+  const first=m.firstName||(m.name?m.name.split(" ")[0]:"");
+  const l1=m.lastName1||(m.name?m.name.split(" ")[1]||"":"");
+  const l2=m.lastName2||(m.name?m.name.split(" ").slice(2).join(" "):"");
+  return {first,last:([l1,l2].filter(Boolean).join(" ")),full:([first,l1,l2].filter(Boolean).join(" "))};
+}
+function parsePartners(p){if(!p)return[];if(Array.isArray(p))return p;return Object.values(p);}
 
+/* ── LAYOUT ALGORITHM ── */
 function autoLayout(members){
-  if(!members.length)return[];
-  const by={};members.forEach(m=>by[m.id]=m);
+  if(!members.length)return members;
+  const m=members.map(x=>({...x}));
+  const byId=Object.fromEntries(m.map(x=>[x.id,x]));
 
-  // Assign generations via BFS from roots
+  // Step 1: Assign generations via BFS from roots
   const gen={};
-  members.forEach(m=>{if(!m.parent1Id&&!m.parent2Id)gen[m.id]=0;});
-  let chg=true,itr=0;
-  while(chg&&itr++<100){chg=false;members.forEach(m=>{
-    if(gen[m.id]!=null)return;
-    const gs=[m.parent1Id,m.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!=null);
-    if(gs.length){gen[m.id]=Math.max(...gs)+1;chg=true;}
-  });}
-  members.forEach(m=>{if(gen[m.id]==null)gen[m.id]=0;});
-  // Partners share the same (lower) generation
-  chg=true;itr=0;
-  while(chg&&itr++<100){chg=false;members.forEach(m=>(m.partnerships||[]).forEach(pr=>{
-    if(gen[pr.partnerId]==null)return;
-    const g=Math.min(gen[m.id],gen[pr.partnerId]);
-    if(gen[m.id]!==g){gen[m.id]=g;chg=true;}
-    if(gen[pr.partnerId]!==g){gen[pr.partnerId]=g;chg=true;}
-  }));}
-  // Children must be strictly below every parent
-  chg=true;itr=0;
-  while(chg&&itr++<100){chg=false;members.forEach(m=>{
-    const gs=[m.parent1Id,m.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!=null);
-    if(!gs.length)return;const n=Math.max(...gs)+1;
-    if(gen[m.id]<n){gen[m.id]=n;chg=true;}
-  });}
+  // Find roots: no parents
+  const roots=m.filter(x=>!x.parent1Id&&!x.parent2Id);
+  // If no roots found, everyone is root
+  if(!roots.length)m.forEach(x=>gen[x.id]=0);
+  else{
+    const queue=roots.map(r=>{gen[r.id]=0;return r.id});
+    // BFS children
+    let safety=0;
+    while(queue.length&&safety++<500){
+      const pid=queue.shift();
+      const children=m.filter(c=>c.parent1Id===pid||c.parent2Id===pid);
+      children.forEach(c=>{
+        const parentGen=gen[pid]||0;
+        const newGen=parentGen+1;
+        if(gen[c.id]===undefined||gen[c.id]<newGen){
+          gen[c.id]=newGen;
+          queue.push(c.id);
+        }
+      });
+    }
+    // Assign gen 0 to anyone still unassigned
+    m.forEach(x=>{if(gen[x.id]===undefined)gen[x.id]=0;});
+  }
 
-  const CG=100; // couple: center-to-center (≈70px avatar + 30px gap)
-  const NG=170; // min space between separate nodes/units
-  const YG=200,YT=100;
-  const maxG=Math.max(...Object.values(gen),0);
-  const posX={}; // stores final x per member id
-
-  // children map
-  const kids={};members.forEach(m=>[m.parent1Id,m.parent2Id].filter(Boolean).forEach(pid=>{
-    if(!kids[pid])kids[pid]=[];if(!kids[pid].includes(m.id))kids[pid].push(m.id);
-  }));
-
-  // Bottom-up: position from deepest generation upward
-  for(let g=maxG;g>=0;g--){
-    const gms=members.filter(m=>gen[m.id]===g)
-      .sort((a,b)=>(a.birthDate||"").localeCompare(b.birthDate||""));
-    // Build units: couple blocks or singles
-    const done=new Set();const units=[];
-    gms.forEach(m=>{
-      if(done.has(m.id))return;done.add(m.id);
-      const pr=(m.partnerships||[]).find(p=>gen[p.partnerId]===g&&!done.has(p.partnerId));
-      if(pr){
-        const pm=by[pr.partnerId];done.add(pm.id);
-        // man on left, woman on right
-        const mLeft=m.gender==="M"||(m.gender!=="F"&&pm.gender==="F");
-        units.push({couple:true,ids:mLeft?[m.id,pm.id]:[pm.id,m.id]});
-      } else {
-        units.push({couple:false,ids:[m.id]});
-      }
-    });
-
-    // Place units: target center = avg x of all children already placed below
-    let cur=80;
-    units.forEach(u=>{
-      const cxs=[];
-      u.ids.forEach(id=>(kids[id]||[]).forEach(cid=>{
-        if(posX[cid]!=null)cxs.push(posX[cid]);
-      }));
-      const ideal=cxs.length?cxs.reduce((a,b)=>a+b)/cxs.length:null;
-      if(u.couple){
-        const cx=Math.max(ideal!=null?ideal:cur+CG/2, cur+CG/2);
-        posX[u.ids[0]]=cx-CG/2; // man (left)
-        posX[u.ids[1]]=cx+CG/2; // woman (right)
-        cur=cx+CG/2+NG*0.6;
-      } else {
-        const x=Math.max(ideal!=null?ideal:cur, cur);
-        posX[u.ids[0]]=x;
-        cur=x+NG;
-      }
+  // Step 2: Couples must be at same generation (use the LOWER number = higher position)
+  let changed=true,iter=0;
+  while(changed&&iter++<50){
+    changed=false;
+    m.forEach(p=>{
+      (p.partnerships||[]).forEach(pr=>{
+        const a=gen[p.id],b=gen[pr.partnerId];
+        if(a!==undefined&&b!==undefined&&a!==b){
+          const minG=Math.min(a,b);
+          if(gen[p.id]!==minG){gen[p.id]=minG;changed=true;}
+          if(gen[pr.partnerId]!==minG){gen[pr.partnerId]=minG;changed=true;}
+        }
+      });
     });
   }
 
-  return members.map(m=>({...m,x:posX[m.id]!=null?posX[m.id]:80,y:YT+gen[m.id]*YG}));
-}
+  // Step 3: Ensure children are ALWAYS below parents
+  changed=true;iter=0;
+  while(changed&&iter++<50){
+    changed=false;
+    m.forEach(c=>{
+      [c.parent1Id,c.parent2Id].filter(Boolean).forEach(pid=>{
+        if(gen[pid]!==undefined&&gen[c.id]!==undefined&&gen[c.id]<=gen[pid]){
+          gen[c.id]=gen[pid]+1;
+          changed=true;
+        }
+      });
+    });
+  }
 
-function Lines({members}){
-  const by={};members.forEach(m=>by[m.id]=m);
-  const segs=[];const drawn=new Set();
-  members.forEach(m=>(m.partnerships||[]).forEach(pr=>{
-    const key=[m.id,pr.partnerId].sort().join("-");
-    if(drawn.has(key))return;drawn.add(key);
-    const sp=by[pr.partnerId];if(!sp||Math.abs(m.y-sp.y)>5)return;
-    const isEx=pr.type==="anterior";
-    const x1=Math.min(m.x,sp.x)+36,x2=Math.max(m.x,sp.x)-36;
-    if(x2<=x1)return;
-    segs.push(<line key={`pt-${key}`} x1={x1} y1={m.y} x2={x2} y2={m.y}
-      stroke={isEx?"#ddd":"#bbb"} strokeWidth={2} strokeDasharray={isEx?"8 5":"none"}/>);
-  }));
-  const fams={};
-  members.forEach(m=>{
-    if(!m.parent1Id&&!m.parent2Id)return;
-    const fk=[m.parent1Id||"_",m.parent2Id||"_"].sort().join("|");
-    if(!fams[fk])fams[fk]={p1:m.parent1Id,p2:m.parent2Id,ch:[]};
-    fams[fk].ch.push(m);
+  // Step 4: Siblings at same generation
+  changed=true;iter=0;
+  while(changed&&iter++<50){
+    changed=false;
+    m.forEach(a=>{
+      m.forEach(b=>{
+        if(a.id===b.id)return;
+        const share=(a.parent1Id&&(a.parent1Id===b.parent1Id||a.parent1Id===b.parent2Id))||
+                     (a.parent2Id&&(a.parent2Id===b.parent1Id||a.parent2Id===b.parent2Id));
+        if(share&&gen[a.id]!==gen[b.id]){
+          const maxG=Math.max(gen[a.id],gen[b.id]);
+          gen[a.id]=maxG;gen[b.id]=maxG;changed=true;
+        }
+      });
+    });
+  }
+
+  // Re-check children below parents
+  changed=true;iter=0;
+  while(changed&&iter++<50){
+    changed=false;
+    m.forEach(c=>{
+      [c.parent1Id,c.parent2Id].filter(Boolean).forEach(pid=>{
+        if(gen[pid]!==undefined&&gen[c.id]!==undefined&&gen[c.id]<=gen[pid]){
+          gen[c.id]=gen[pid]+1;changed=true;
+        }
+      });
+    });
+  }
+
+  // Step 5: Build generation rows
+  const maxGen=Math.max(...Object.values(gen));
+  const rows={};
+  for(let g=0;g<=maxGen;g++)rows[g]=m.filter(x=>gen[x.id]===g);
+
+  // Step 6: Sort within each row & build couple blocks
+  // For each generation, group couples together, then singles
+  const NODE_W=150, COUPLE_GAP=30, GROUP_GAP=60;
+
+  // Identify couple pairs
+  function getCoupleId(person){
+    const partners=parsePartners(person.partnerships);
+    if(!partners.length)return null;
+    // Find partner in same generation
+    for(const pr of partners){
+      if(gen[pr.partnerId]===gen[person.id])return pr.partnerId;
+    }
+    return null;
+  }
+
+  // For bottom-up positioning, first handle leaves, then go up
+  const posX={};
+
+  // Process from bottom to top
+  for(let g=maxGen;g>=0;g--){
+    const row=rows[g]||[];
+    if(!row.length)continue;
+
+    // Build blocks: [{type:'couple',left:id,right:id} or {type:'single',id:id}]
+    const used=new Set();
+    const blocks=[];
+    // Sort row: by birthDate, couples together
+    const sorted=[...row].sort((a,b)=>{
+      const da=a.birthDate||"9999",db=b.birthDate||"9999";
+      return da.localeCompare(db);
+    });
+
+    sorted.forEach(p=>{
+      if(used.has(p.id))return;
+      const partnerId=getCoupleId(p);
+      if(partnerId&&!used.has(partnerId)&&gen[partnerId]===g){
+        const partner=byId[partnerId];
+        if(partner){
+          used.add(p.id);used.add(partnerId);
+          // Man left, woman right
+          if(p.gender==="M"){blocks.push({type:"couple",left:p.id,right:partnerId});}
+          else{blocks.push({type:"couple",left:partnerId,right:p.id});}
+          return;
+        }
+      }
+      used.add(p.id);
+      blocks.push({type:"single",id:p.id});
+    });
+
+    // Sort blocks: try to put parent-blocks above their children
+    // For bottom generations, just spread evenly
+    // For upper generations, center over children
+
+    if(g===maxGen||!Object.keys(posX).length){
+      // Bottom row or first row: spread evenly
+      let cursor=0;
+      blocks.forEach((bl,i)=>{
+        if(bl.type==="couple"){
+          posX[bl.left]=cursor;
+          posX[bl.right]=cursor+NODE_W+COUPLE_GAP;
+          cursor+=2*NODE_W+COUPLE_GAP+GROUP_GAP;
+        } else {
+          posX[bl.id]=cursor;
+          cursor+=NODE_W+GROUP_GAP;
+        }
+      });
+    } else {
+      // Upper rows: center each block over its children
+      const blockPositions=[];
+
+      blocks.forEach(bl=>{
+        const ids=bl.type==="couple"?[bl.left,bl.right]:[bl.id];
+        // Find all children of these people
+        const childXs=[];
+        m.forEach(c=>{
+          if(posX[c.id]!==undefined){
+            const isChild=ids.includes(c.parent1Id)||ids.includes(c.parent2Id);
+            if(isChild)childXs.push(posX[c.id]);
+          }
+        });
+
+        let centerX;
+        if(childXs.length){
+          centerX=(Math.min(...childXs)+Math.max(...childXs))/2;
+        } else {
+          // No children positioned yet, use default
+          centerX=blockPositions.length?(blockPositions[blockPositions.length-1].right+GROUP_GAP):0;
+        }
+
+        if(bl.type==="couple"){
+          const totalW=2*NODE_W+COUPLE_GAP;
+          const startX=centerX-totalW/2;
+          blockPositions.push({bl,left:startX,right:startX+totalW,ids});
+          posX[bl.left]=startX;
+          posX[bl.right]=startX+NODE_W+COUPLE_GAP;
+        } else {
+          const startX=centerX-NODE_W/2;
+          blockPositions.push({bl,left:startX,right:startX+NODE_W,ids});
+          posX[bl.id]=startX;
+        }
+      });
+
+      // Fix collisions: push right if overlapping
+      blockPositions.sort((a,b)=>a.left-b.left);
+      for(let i=1;i<blockPositions.length;i++){
+        const prev=blockPositions[i-1];
+        const curr=blockPositions[i];
+        const minLeft=prev.right+GROUP_GAP;
+        if(curr.left<minLeft){
+          const shift=minLeft-curr.left;
+          curr.left+=shift;curr.right+=shift;
+          // Update posX for this block
+          const bl=curr.bl;
+          if(bl.type==="couple"){
+            posX[bl.left]=curr.left;
+            posX[bl.right]=curr.left+NODE_W+COUPLE_GAP;
+          } else {
+            posX[bl.id]=curr.left;
+          }
+        }
+      }
+    }
+  }
+
+  // Step 7: Center everything
+  const allX=Object.values(posX);
+  const minX=Math.min(...allX);
+  const maxX=Math.max(...allX);
+  const offsetX=80-minX; // left padding
+
+  // Apply positions
+  m.forEach(p=>{
+    p.x=(posX[p.id]||0)+offsetX+NODE_W/2;
+    p.y=gen[p.id]*200+100;
   });
-  Object.entries(fams).forEach(([fk,{p1,p2,ch}])=>{
-    const pa=by[p1],pb=by[p2];if(!ch.length)return;
-    const px=pa&&pb?(pa.x+pb.x)/2:pa?pa.x:pb?pb.x:0;
-    const py=(pa||pb).y;
-    const cy=ch[0].y;
-    const exitY=py+42,entryY=cy-48,barY=(exitY+entryY)/2;
-    const xs=ch.map(c=>c.x);
-    const bx1=Math.min(px,...xs),bx2=Math.max(px,...xs);
-    segs.push(<line key={`v1-${fk}`} x1={px} y1={exitY} x2={px} y2={barY} stroke="#bbb" strokeWidth={2}/>);
-    segs.push(<line key={`bh-${fk}`} x1={bx1} y1={barY} x2={bx2} y2={barY} stroke="#bbb" strokeWidth={2}/>);
-    ch.forEach(c=>segs.push(<line key={`v2-${c.id}`} x1={c.x} y1={barY} x2={c.x} y2={entryY} stroke="#bbb" strokeWidth={2}/>));
-  });
-  return <>{segs}</>;
+
+  return m;
 }
 
-function Node({m,photos,onTap}){
-  const photo=photos[m.id];
-  const a=calcAge(m.birthDate,m.deathDate,m.deceased);
-  const subs=[m.lastName1,m.lastName2].filter(Boolean).join(" ");
-  const alive=!m.deceased;
-  return(
-    <g transform={`translate(${m.x},${m.y})`} style={{cursor:"pointer"}} onClick={()=>onTap(m)}>
-      <circle cx={0} cy={-15} r={36} fill={alive?"#e8f0fe":"#e8e8e8"} stroke={alive?"#4a90d9":"#aaa"} strokeWidth={2}/>
-      {photo
-        ?<image href={photo} x={-35} y={-50} width={70} height={70} clipPath="url(#circClip)"/>
-        :<text x={0} y={-10} textAnchor="middle" dominantBaseline="middle" fontSize={32}>{m.gender==="F"?"👩":"👨"}</text>}
-      <text x={0} y={34} textAnchor="middle" fontSize={13} fontWeight="700" fill={alive?"#1c1c1e":"#555"}>
-        {m.deceased?"† ":""}{m.firstName||m.name||"?"}
-      </text>
-      {subs&&<text x={0} y={50} textAnchor="middle" fontSize={11} fill="#777">{subs}</text>}
-      {a!=null&&<text x={0} y={subs?65:50} textAnchor="middle" fontSize={11} fill="#aaa">{a} años</text>}
-    </g>
-  );
+/* ── Firebase helpers ── */
+function savePhotos(members){
+  const photos={};
+  members.forEach(m=>{if(m.photo)photos[m.id]=m.photo;});
+  try{localStorage.setItem("family-photos",JSON.stringify(photos));}catch(e){}
+}
+function loadPhotos(){
+  try{return JSON.parse(localStorage.getItem("family-photos")||"{}");}catch(e){return{};}
+}
+function stripPhotos(members){
+  return members.map(m=>{const c={...m};delete c.photo;return c;});
+}
+function saveToDB(members){
+  const data={};
+  stripPhotos(members).forEach(m=>{data[m.id]=m;});
+  return dbRef.set(data);
 }
 
-const EMPTY={firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",residence:"",
-  phone:"",email:"",facebook:"",instagram:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",
-  parent1Id:"",parent2Id:"",partnerships:[]};
-
-function Sheet({title,onClose,children}){
-  return(<>
-    <div className="overlay" onClick={onClose}/>
-    <div className="sheet">
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-        <b style={{fontSize:17}}>{title}</b>
-        <button className="btn gray" style={{padding:"5px 13px"}} onClick={onClose}>✕</button>
-      </div>
-      {children}
-    </div>
-  </>);
+/* ── Components ── */
+function Avatar({photo,name,size=70,gender,deceased}){
+  const ini=(name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+  const grad=gender==="F"?"linear-gradient(135deg,#FF2D55,#FF6482)":"linear-gradient(135deg,#007AFF,#5AC8FA)";
+  return <div style={{width:size,height:size,borderRadius:size/2,
+    background:photo?`url(${photo}) center/cover no-repeat`:grad,
+    display:"flex",alignItems:"center",justifyContent:"center",
+    color:"#fff",fontSize:size*.3,fontWeight:600,
+    border:deceased?"3px solid #999":`3px solid ${gender==="F"?"#FF2D55":"#007AFF"}`,
+    filter:deceased?"grayscale(100%) opacity(0.7)":"none",
+    margin:"0 auto"}}>{!photo&&ini}</div>;
 }
 
-function ProfileSheet({m,members,photos,onEdit,onDelete,onClose}){
-  const by={};members.forEach(x=>by[x.id]=x);
-  const a=calcAge(m.birthDate,m.deathDate,m.deceased);
-  const photo=photos[m.id];
-  const rows=[
-    ["Nacimiento",fmt(m.birthDate)],["Lugar de nacimiento",m.birthPlace],
-    ["Residencia",m.residence],["Teléfono",m.phone],["Correo",m.email],
-    ["Facebook",m.facebook],["Instagram",m.instagram],
-    m.deceased&&["Fallecimiento",fmt(m.deathDate)],m.deceased&&["Lugar de restos",m.deathPlace],
-  ].filter(r=>r&&r[1]);
-  const partners=(m.partnerships||[]).map(pr=>({p:by[pr.partnerId],type:pr.type})).filter(x=>x.p);
-  const children=members.filter(c=>c.parent1Id===m.id||c.parent2Id===m.id);
-  const parents=[m.parent1Id,m.parent2Id].map(id=>by[id]).filter(Boolean);
-  return(
-    <Sheet title="Perfil" onClose={onClose}>
-      <div style={{textAlign:"center",marginBottom:14}}>
-        {photo?<img src={photo} style={{width:76,height:76,borderRadius:"50%",objectFit:"cover"}}/>
-          :<div style={{width:76,height:76,borderRadius:"50%",background:"#e8f0fe",display:"flex",
-            alignItems:"center",justifyContent:"center",fontSize:38,margin:"0 auto"}}>{m.gender==="F"?"👩":"👨"}</div>}
-        <div style={{fontSize:18,fontWeight:700,marginTop:8}}>{m.deceased?"† ":""}{[m.firstName,m.lastName1,m.lastName2].filter(Boolean).join(" ")}</div>
-        {a!=null&&<div style={{color:"#999",fontSize:13}}>{a} años</div>}
-      </div>
-      {rows.map(([l,v])=><div key={l} style={{padding:"7px 0",borderBottom:"1px solid #f0f0f0"}}>
-        <div style={{fontSize:11,color:"#aaa"}}>{l}</div><div style={{fontSize:15}}>{v}</div>
-      </div>)}
-      {partners.length>0&&<div style={{marginTop:10}}>
-        <div style={{fontSize:11,color:"#aaa",marginBottom:3}}>Pareja{partners.length>1?"s":""}</div>
-        {partners.map(({p,type})=><div key={p.id} style={{fontSize:14,padding:"3px 0"}}>{p.firstName} {p.lastName1}{type==="anterior"?" (ex)":""}</div>)}
-      </div>}
-      {parents.length>0&&<div style={{marginTop:8}}>
-        <div style={{fontSize:11,color:"#aaa",marginBottom:3}}>Padres</div>
-        {parents.map(p=><div key={p.id} style={{fontSize:14,padding:"2px 0"}}>{p.firstName} {p.lastName1}</div>)}
-      </div>}
-      {children.length>0&&<div style={{marginTop:8}}>
-        <div style={{fontSize:11,color:"#aaa",marginBottom:3}}>Hijos</div>
-        {children.map(c=><div key={c.id} style={{fontSize:14,padding:"2px 0"}}>{c.firstName} {c.lastName1}</div>)}
-      </div>}
-      <div style={{display:"flex",gap:8,marginTop:16}}>
-        <button className="btn blue" style={{flex:1}} onClick={onEdit}>Editar</button>
-        <button className="btn red" onClick={onDelete}>Eliminar</button>
-      </div>
-    </Sheet>
-  );
-}
-
-function FormSheet({initial,members,photos,onSave,onClose}){
-  const [f,setF]=useState({...EMPTY,...initial});
-  const [newPhoto,setNewPhoto]=useState(null);
-  const photoRef=useRef();
-  const set=(k,v)=>setF(p=>({...p,[k]:v}));
-  const setPr=(i,k,v)=>set("partnerships",f.partnerships.map((p,j)=>j===i?{...p,[k]:v}:p));
-  const handlePhoto=e=>{const file=e.target.files?.[0];if(!file)return;
-    const r=new FileReader();r.onload=ev=>{const img=new Image();img.onload=()=>{
-      const c=document.createElement("canvas");c.width=200;c.height=200;
-      const ctx=c.getContext("2d");const s=Math.min(img.width,img.height);
-      ctx.drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,0,0,200,200);
-      setNewPhoto(c.toDataURL("image/jpeg",.75));
-    };img.src=ev.target.result;};r.readAsDataURL(file);};
-  const save=()=>{
-    if(!f.firstName.trim()){alert("Ingresa el nombre");return;}
-    const id=f.id||uid();
-    const data={...f,id};delete data.photo;
-    onSave(data,newPhoto);
-  };
-  const others=members.filter(m=>m.id!==f.id);
-  const displayPhoto=newPhoto||(f.id?photos[f.id]:null);
-  const fields=[["Nombre","firstName"],["Apellido paterno","lastName1"],["Apellido materno","lastName2"],
-    ["Lugar de nacimiento","birthPlace"],["Residencia","residence"],
-    ["Teléfono","phone"],["Correo","email"],["Facebook","facebook"],["Instagram","instagram"]];
-  return(
-    <Sheet title={f.id?"Editar persona":"Nueva persona"} onClose={onClose}>
-      <div style={{textAlign:"center",marginBottom:14}}>
-        <div style={{width:76,height:76,borderRadius:"50%",overflow:"hidden",margin:"0 auto",background:"#eee",cursor:"pointer"}} onClick={()=>photoRef.current.click()}>
-          {displayPhoto?<img src={displayPhoto} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-            :<div style={{height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36}}>{f.gender==="F"?"👩":"👨"}</div>}
+function PersonNode({m,onTap}){
+  const d=getDisplay(m);
+  const age=calcAge(m.birthDate,m.deceased?m.deathDate:null);
+  return (
+    <foreignObject x={m.x-75} y={m.y-55} width={150} height={130}>
+      <div onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0"}}>
+        <Avatar photo={m.photo} name={d.full} size={70} gender={m.gender} deceased={m.deceased}/>
+        <div style={{marginTop:4,fontSize:14,fontWeight:700,color:m.deceased?"#888":"#000"}}>
+          {m.deceased?"† ":""}{d.first}
         </div>
-        <input ref={photoRef} type="file" accept="image/*" style={{display:"none"}} onChange={handlePhoto}/>
-        <div style={{fontSize:12,color:"#007AFF",marginTop:4,cursor:"pointer"}} onClick={()=>photoRef.current.click()}>Cambiar foto</div>
+        {d.last&&<div style={{fontSize:11,color:"#666"}}>{d.last}</div>}
+        {age!==null&&<div style={{fontSize:11,color:"#999"}}>{age} años</div>}
       </div>
-      {fields.map(([l,k])=><div className="f" key={k}><label>{l}</label><input value={f[k]||""} onChange={e=>set(k,e.target.value)} placeholder={l}/></div>)}
-      <div className="f"><label>Fecha de nacimiento</label><input type="date" value={f.birthDate||""} onChange={e=>set("birthDate",e.target.value)}/></div>
-      <div className="f"><label>Género</label><select value={f.gender||"M"} onChange={e=>set("gender",e.target.value)}>
-        <option value="M">Masculino</option><option value="F">Femenino</option>
-      </select></div>
-      <div className="f"><label>Estado</label><select value={f.deceased?"fallecido":"vivo"} onChange={e=>set("deceased",e.target.value==="fallecido")}>
-        <option value="vivo">Vivo</option><option value="fallecido">Fallecido</option>
-      </select></div>
-      {f.deceased&&<><div className="f"><label>Fecha de fallecimiento</label><input type="date" value={f.deathDate||""} onChange={e=>set("deathDate",e.target.value)}/></div>
-        <div className="f"><label>Lugar de restos</label><input value={f.deathPlace||""} onChange={e=>set("deathPlace",e.target.value)}/></div></>}
-      <div className="f"><label>Padre</label><select value={f.parent1Id||""} onChange={e=>set("parent1Id",e.target.value)}>
-        <option value="">— ninguno —</option>{others.map(m=><option key={m.id} value={m.id}>{m.firstName} {m.lastName1}</option>)}
-      </select></div>
-      <div className="f"><label>Madre</label><select value={f.parent2Id||""} onChange={e=>set("parent2Id",e.target.value)}>
-        <option value="">— ninguno —</option>{others.map(m=><option key={m.id} value={m.id}>{m.firstName} {m.lastName1}</option>)}
-      </select></div>
-      <div style={{marginBottom:12}}>
-        <div style={{fontSize:12,color:"#888",marginBottom:6}}>Parejas</div>
-        {(f.partnerships||[]).map((pr,i)=>(
-          <div key={i} style={{display:"flex",gap:6,marginBottom:8}}>
-            <select value={pr.partnerId} onChange={e=>setPr(i,"partnerId",e.target.value)} style={{flex:2,padding:"9px",borderRadius:8,border:"1.5px solid #e5e5e5"}}>
-              <option value="">— persona —</option>{others.map(m=><option key={m.id} value={m.id}>{m.firstName} {m.lastName1}</option>)}
-            </select>
-            <select value={pr.type} onChange={e=>setPr(i,"type",e.target.value)} style={{flex:1,padding:"9px",borderRadius:8,border:"1.5px solid #e5e5e5"}}>
-              <option value="actual">Actual</option><option value="anterior">Ex</option>
-            </select>
-            <button className="btn red" style={{padding:"8px 11px"}} onClick={()=>set("partnerships",f.partnerships.filter((_,j)=>j!==i))}>✕</button>
-          </div>
-        ))}
-        <button className="btn gray" style={{width:"100%"}} onClick={()=>set("partnerships",[...(f.partnerships||[]),{partnerId:"",type:"actual"}])}>+ Agregar pareja</button>
-      </div>
-      <div style={{display:"flex",gap:8,paddingTop:6}}>
-        <button className="btn blue" style={{flex:1}} onClick={save}>Guardar</button>
-        <button className="btn gray" onClick={onClose}>Cancelar</button>
-      </div>
-    </Sheet>
+    </foreignObject>
   );
 }
 
+function TreeLines({members}){
+  const lines=[];
+  const byId=Object.fromEntries(members.map(m=>[m.id,m]));
+  const drawn=new Set();
+
+  // Couple lines (horizontal)
+  members.forEach(m=>{
+    parsePartners(m.partnerships).forEach(pr=>{
+      const key=[m.id,pr.partnerId].sort().join("-");
+      if(drawn.has(key))return;drawn.add(key);
+      const sp=byId[pr.partnerId];if(!sp)return;
+      if(Math.abs(m.y-sp.y)>10)return; // not same row
+      const x1=Math.min(m.x,sp.x)+35,x2=Math.max(m.x,sp.x)-35;
+      const y=m.y;
+      lines.push(<line key={`couple-${key}`} x1={x1} y1={y} x2={x2} y2={y}
+        stroke={pr.type==="anterior"?"#ccc":"#bbb"} strokeWidth={2}
+        strokeDasharray={pr.type==="anterior"?"5 4":"none"}/>);
+    });
+  });
+
+  // Parent-child lines (straight H+V)
+  // Group children by parent pair
+  const familyGroups={};
+  members.forEach(c=>{
+    if(!c.parent1Id&&!c.parent2Id)return;
+    const key=[c.parent1Id||"",c.parent2Id||""].sort().join("|");
+    if(!familyGroups[key])familyGroups[key]={parents:[c.parent1Id,c.parent2Id].filter(Boolean),children:[]};
+    familyGroups[key].children.push(c);
+  });
+
+  Object.values(familyGroups).forEach(fam=>{
+    const parents=fam.parents.map(id=>byId[id]).filter(Boolean);
+    const children=fam.children;
+    if(!parents.length||!children.length)return;
+
+    // Parent anchor point: center between parents (or single parent)
+    const parentCenterX=parents.reduce((s,p)=>s+p.x,0)/parents.length;
+    const parentY=parents[0].y+55; // bottom of parent card
+
+    // Child top Y
+    const childY=children[0].y-55;
+    const midY=(parentY+childY)/2;
+
+    // Vertical line from parents down to mid
+    lines.push(<line key={`pv-${fam.parents.join("-")}`}
+      x1={parentCenterX} y1={parentY} x2={parentCenterX} y2={midY}
+      stroke="#bbb" strokeWidth={2}/>);
+
+    // Horizontal bar at midY spanning all children
+    const childXs=children.map(c=>c.x).sort((a,b)=>a-b);
+    const barLeft=Math.min(parentCenterX,childXs[0]);
+    const barRight=Math.max(parentCenterX,childXs[childXs.length-1]);
+
+    if(children.length>1||Math.abs(parentCenterX-childXs[0])>5){
+      lines.push(<line key={`ph-${fam.parents.join("-")}`}
+        x1={barLeft} y1={midY} x2={barRight} y2={midY}
+        stroke="#bbb" strokeWidth={2}/>);
+    }
+
+    // Vertical lines from bar down to each child
+    children.forEach(c=>{
+      lines.push(<line key={`cv-${c.id}`}
+        x1={c.x} y1={midY} x2={c.x} y2={childY}
+        stroke="#bbb" strokeWidth={2}/>);
+    });
+  });
+
+  return <>{lines}</>;
+}
+
+/* ── Form components ── */
+function Inp({value,onChange,placeholder,type="text"}){
+  return <input type={type} value={value||""} onChange={onChange} placeholder={placeholder} style={{
+    width:"100%",padding:"11px 14px",background:"#fff",border:"none",
+    borderBottom:"0.5px solid rgba(60,60,67,0.12)",
+    color:"#000",fontSize:16,outline:"none",boxSizing:"border-box"}}/>;
+}
+function Sel({value,onChange,children}){
+  return <select value={value||""} onChange={onChange} style={{
+    width:"100%",padding:"11px 14px",background:"#fff",border:"none",
+    borderBottom:"0.5px solid rgba(60,60,67,0.12)",
+    color:"#000",fontSize:16,outline:"none",boxSizing:"border-box",appearance:"none"}}>{children}</select>;
+}
+function SecTitle({children}){
+  return <div style={{color:"rgba(60,60,67,0.6)",fontSize:12,fontWeight:500,padding:"16px 14px 6px",textTransform:"uppercase",letterSpacing:.5}}>{children}</div>;
+}
+function Toggle({value,onChange,labelA,labelB}){
+  return <div style={{display:"flex",background:"rgba(120,120,128,0.12)",borderRadius:9,padding:2,margin:"8px 14px"}}>
+    {[{l:labelA,v:false},{l:labelB,v:true}].map(o=>
+      <button key={String(o.v)} onClick={()=>onChange(o.v)} style={{flex:1,padding:"7px 0",border:"none",borderRadius:7,
+        background:value===o.v?"#fff":"transparent",color:value===o.v?"#000":"rgba(60,60,67,0.6)",
+        fontSize:13,fontWeight:500,cursor:"pointer",
+        boxShadow:value===o.v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{o.l}</button>)}
+  </div>;
+}
+function PhotoUpload({photo,gender,name,onUp}){
+  const inp=useRef(null);
+  const go=e=>{const f=e.target.files?.[0];if(!f)return;
+    const img=new Image(),reader=new FileReader();
+    reader.onload=ev=>{img.onload=()=>{
+      const c=document.createElement("canvas");const max=200;
+      let w=img.width,h=img.height;
+      if(w>h){if(w>max){h=h*(max/w);w=max;}}else{if(h>max){w=w*(max/h);h=max;}}
+      c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);
+      onUp(c.toDataURL("image/jpeg",0.7));
+    };img.src=ev.target.result;};reader.readAsDataURL(f);};
+  return <div onClick={()=>inp.current?.click()} style={{textAlign:"center",cursor:"pointer",padding:12}}>
+    <Avatar photo={photo} name={name||"?"} size={80} gender={gender}/>
+    <div style={{color:"#007AFF",fontSize:13,fontWeight:500,marginTop:6}}>{photo?"Cambiar foto":"Agregar foto"}</div>
+    <input ref={inp} type="file" accept="image/*" onChange={go} style={{display:"none"}}/>
+  </div>;
+}
+
+/* ── Main App ── */
 function App(){
   const [members,setMembers]=useState([]);
-  const [photos,setPhotos]=useState({});
+  const [sel,setSel]=useState(null);
+  const [panel,setPanel]=useState(null); // "view"|"edit"|"add"|"partners"
+  const [form,setForm]=useState({});
+  const [pForm,setPForm]=useState({partnerId:"",type:"actual"});
+  const [toast,setToast]=useState(null);
   const [zoom,setZoom]=useState(1);
-  const [pan,setPan]=useState({x:0,y:0});
-  const [profile,setProfile]=useState(null);
-  const [form,setForm]=useState(null);
-  const [saving,setSaving]=useState(false);
-  const panRef=useRef(null);const touchRef=useRef(null);
+  const [loading,setLoading]=useState(true);
+  const isLocal=useRef(false);
+  const autoSaveTimer=useRef(null);
 
+  const flash=msg=>{setToast(msg);setTimeout(()=>setToast(null),2000);};
+
+  // Load from Firebase
   useEffect(()=>{
-    setPhotos(getPhotos());
-    db.on("value",snap=>{
-      const data=snap.val();
-      console.log("Firebase snapshot:", data);
-      if(!data){setMembers([]);return;}
-      // Firebase converts arrays to objects {0:{...},1:{...}} — fix partnerships
-      const ms=Object.entries(data).map(([key,m])=>{
-        const id=m.id||key;
-        let ps=m.partnerships;
-        if(ps&&!Array.isArray(ps))ps=Object.values(ps);
-        return {...m,id,partnerships:ps||[]};
-      });
-      console.log("Members parsed:", ms.length, ms);
-      setMembers(ms);
+    dbRef.on("value",snap=>{
+      if(isLocal.current){isLocal.current=false;return;}
+      const val=snap.val();
+      if(!val){setLoading(false);return;}
+      const photos=loadPhotos();
+      const arr=Object.entries(val).map(([k,v])=>({
+        ...v,id:v.id||k,
+        partnerships:parsePartners(v.partnerships),
+        photo:photos[v.id||k]||null
+      }));
+      setMembers(autoLayout(arr));
+      setLoading(false);
     });
-    return()=>db.off("value");
+    return ()=>dbRef.off();
   },[]);
 
-  const saveMember=(data,photo)=>{
-    setSaving(true);
-    const p={...getPhotos()};
-    if(photo)p[data.id]=photo;
-    savePhotos(p);setPhotos(p);
-    db.child(data.id).set(data).then(()=>{setSaving(false);setForm(null);setProfile(null);});
+  // Auto save
+  const doSave=useCallback((data)=>{
+    savePhotos(data);
+    isLocal.current=true;
+    saveToDB(data).then(()=>flash("Guardado ✓")).catch(()=>flash("Error al guardar"));
+  },[]);
+
+  const update=useCallback(fn=>{
+    setMembers(prev=>{
+      const next=autoLayout(typeof fn==="function"?fn(prev):fn);
+      if(autoSaveTimer.current)clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current=setTimeout(()=>doSave(next),2000);
+      return next;
+    });
+  },[doSave]);
+
+  const selM=members.find(m=>m.id===sel);
+
+  // Open panels
+  const tapCard=id=>{setSel(id);setPanel("view");};
+  const openAdd=()=>{setForm({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",residence:"",phone:"",email:"",facebook:"",instagram:"",parent1Id:"",parent2Id:"",photo:null});setPanel("add");};
+  const openEdit=()=>{if(!selM)return;setForm({...selM});setPanel("edit");};
+  const openPartners=()=>{if(!selM)return;setPForm({partnerId:"",type:"actual"});setPanel("partners");};
+
+  const saveForm=()=>{
+    if(!form.firstName?.trim())return;
+    if(panel==="add"){
+      const n={...form,id:genId(),partnerships:[]};
+      update(p=>[...p,n]);
+    } else {
+      update(p=>p.map(m=>m.id===sel?{...m,...form}:m));
+    }
+    setPanel(null);
   };
 
-  const deleteMember=id=>{
-    if(!confirm("¿Eliminar esta persona?"))return;
-    const p={...getPhotos()};delete p[id];savePhotos(p);setPhotos(p);
-    db.child(id).remove();setProfile(null);
+  const addPartner=()=>{
+    if(!sel||!pForm.partnerId)return;
+    update(p=>p.map(m=>{
+      if(m.id===sel){const ps=[...m.partnerships];if(!ps.find(x=>x.partnerId===pForm.partnerId))ps.push({partnerId:pForm.partnerId,type:pForm.type});return{...m,partnerships:ps};}
+      if(m.id===pForm.partnerId){const ps=[...m.partnerships];if(!ps.find(x=>x.partnerId===sel))ps.push({partnerId:sel,type:pForm.type});return{...m,partnerships:ps};}
+      return m;
+    }));
+    setPForm({partnerId:"",type:"actual"});
   };
 
-  const onMouseDown=e=>{if(e.button!==0)return;panRef.current={sx:e.clientX-pan.x,sy:e.clientY-pan.y};};
-  const onMouseMove=e=>{if(!panRef.current)return;setPan({x:e.clientX-panRef.current.sx,y:e.clientY-panRef.current.sy});};
-  const onMouseUp=()=>{panRef.current=null;};
-  const onTouchStart=e=>{if(e.touches.length===1)touchRef.current={sx:e.touches[0].clientX-pan.x,sy:e.touches[0].clientY-pan.y};};
-  const onTouchMove=e=>{if(!touchRef.current||e.touches.length!==1)return;e.preventDefault();
-    setPan({x:e.touches[0].clientX-touchRef.current.sx,y:e.touches[0].clientY-touchRef.current.sy});};
+  const removePartner=pid=>{
+    update(p=>p.map(m=>{
+      if(m.id===sel)return{...m,partnerships:m.partnerships.filter(x=>x.partnerId!==pid)};
+      if(m.id===pid)return{...m,partnerships:m.partnerships.filter(x=>x.partnerId!==sel)};
+      return m;
+    }));
+  };
 
-  const safeLayout=ms=>{try{return autoLayout(ms);}catch(e){console.error("autoLayout error:",e);return ms.map((m,i)=>({...m,x:100+i*170,y:100}));}};
+  const removePerson=()=>{
+    if(!sel||!confirm("¿Eliminar a esta persona?"))return;
+    isLocal.current=true;
+    dbRef.child(sel).remove();
+    update(p=>p.filter(m=>m.id!==sel).map(m=>({...m,
+      parent1Id:m.parent1Id===sel?null:m.parent1Id,
+      parent2Id:m.parent2Id===sel?null:m.parent2Id,
+      partnerships:m.partnerships.filter(x=>x.partnerId!==sel)})));
+    setSel(null);setPanel(null);
+  };
+
+  const manualSave=()=>{
+    savePhotos(members);isLocal.current=true;
+    saveToDB(members).then(()=>flash("Guardado ✓")).catch(()=>flash("Error"));
+  };
+
+  // SVG dimensions
+  const allX=members.map(m=>m.x);
+  const allY=members.map(m=>m.y);
+  const svgW=members.length?Math.max(...allX)+200:800;
+  const svgH=members.length?Math.max(...allY)+200:600;
 
   const fit=()=>{
     if(!members.length)return;
-    const laid=safeLayout(members);
-    const xs=laid.map(m=>m.x),ys=laid.map(m=>m.y);
-    const W=window.innerWidth,H=window.innerHeight-60;
-    const z=Math.min(W/(Math.max(...xs)-Math.min(...xs)+160),(H)/(Math.max(...ys)-Math.min(...ys)+160),.95);
-    const cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2;
-    setZoom(z);setPan({x:W/2-cx*z,y:60+(H/2-cy*z)});
+    const vw=window.innerWidth,vh=window.innerHeight-60;
+    setZoom(Math.min(vw/svgW,vh/svgH,1.5));
   };
 
-  const laid=safeLayout(members);
-  const W=window.innerWidth,H=window.innerHeight;
+  if(loading)return <div style={{width:"100%",height:"100vh",background:"#F2F2F7",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
+    <span style={{fontSize:48}}>🌳</span><span style={{color:"rgba(60,60,67,0.6)",fontSize:16}}>Cargando…</span></div>;
 
-  return(
-    <div style={{width:"100%",height:"100%",position:"relative",background:"#F2F2F7"}}>
-      <div style={{position:"fixed",top:0,left:0,right:0,height:54,background:"rgba(249,249,249,.92)",
-        backdropFilter:"blur(20px)",display:"flex",alignItems:"center",padding:"0 14px",gap:7,
-        zIndex:10,borderBottom:"1px solid #e0e0e0"}}>
-        <span style={{fontWeight:700,fontSize:17,flex:1}}>🌳 Mi Familia</span>
-        <button className="btn gray" style={{padding:"6px 13px",fontSize:14}} onClick={()=>setZoom(z=>Math.min(z+.2,3))}>+</button>
-        <button className="btn gray" style={{padding:"6px 13px",fontSize:14}} onClick={()=>setZoom(z=>Math.max(z-.2,.2))}>−</button>
-        <button className="btn gray" style={{padding:"6px 13px",fontSize:13}} onClick={fit}>Ajustar</button>
-        <button className="btn blue" style={{padding:"6px 14px",fontSize:13}} onClick={()=>setForm({...EMPTY})}>+ Agregar</button>
+  const sheet=(title,onClose,content)=><>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.3)",zIndex:50}}/>
+    <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:60,background:"#F2F2F7",borderRadius:"14px 14px 0 0",maxHeight:"90vh",overflowY:"auto",paddingBottom:"env(safe-area-inset-bottom,20px)",animation:"sheetUp .3s ease-out"}}>
+      <div style={{display:"flex",justifyContent:"center",padding:"10px 0 2px"}}><div style={{width:36,height:5,borderRadius:3,background:"rgba(60,60,67,0.15)"}}/></div>
+      <div style={{display:"flex",justifyContent:"space-between",padding:"6px 20px 10px"}}>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"#007AFF",fontSize:17,cursor:"pointer"}}>Cerrar</button>
+        <span style={{fontSize:17,fontWeight:600}}>{title}</span>
+        <div style={{width:50}}/>
       </div>
-      <svg width={W} height={H}
-        style={{position:"absolute",top:54,left:0,cursor:"grab",touchAction:"none"}}
-        onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
-        onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={()=>{touchRef.current=null;}}>
-        <defs><clipPath id="circClip"><circle cx={35} cy={35} r={35}/></clipPath></defs>
-        <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
-          <Lines members={laid}/>
-          {laid.map(m=><Node key={m.id} m={m} photos={photos} onTap={setProfile}/>)}
+      <div style={{padding:"0 20px 24px"}}>{content}</div>
+    </div>
+  </>;
+
+  const close=()=>setPanel(null);
+
+  return <div style={{width:"100%",height:"100vh",background:"#F2F2F7",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+    {toast&&<div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:200,background:"rgba(0,0,0,.75)",color:"#fff",padding:"10px 24px",borderRadius:100,fontSize:14,fontWeight:500,animation:"fadeIn .25s ease"}}>{toast}</div>}
+
+    {/* Header */}
+    <div style={{padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"0.5px solid rgba(60,60,67,0.12)",background:"rgba(249,249,249,0.9)",backdropFilter:"blur(20px)",zIndex:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:22}}>🌳</span>
+        <span style={{fontSize:18,fontWeight:700}}>Mi Familia</span>
+        <span style={{fontSize:12,color:"rgba(60,60,67,0.6)"}}>{members.length}</span>
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <button onClick={()=>setZoom(z=>Math.min(z+0.15,2.5))} style={{width:32,height:32,borderRadius:16,border:"none",background:"rgba(120,120,128,0.12)",fontSize:18,cursor:"pointer"}}>+</button>
+        <button onClick={()=>setZoom(z=>Math.max(z-0.15,0.2))} style={{width:32,height:32,borderRadius:16,border:"none",background:"rgba(120,120,128,0.12)",fontSize:18,cursor:"pointer"}}>−</button>
+        <button onClick={fit} style={{padding:"0 12px",height:32,borderRadius:16,border:"none",background:"rgba(120,120,128,0.12)",fontSize:13,fontWeight:500,cursor:"pointer"}}>Ajustar</button>
+        <button onClick={manualSave} style={{padding:"0 12px",height:32,borderRadius:16,border:"none",background:"#34C759",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>Guardar</button>
+        <button onClick={openAdd} style={{padding:"0 12px",height:32,borderRadius:16,border:"none",background:"#007AFF",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>+ Agregar</button>
+      </div>
+    </div>
+
+    {/* Canvas */}
+    <div style={{flex:1,overflow:"auto",background:"#F2F2F7"}}>
+      <svg width={svgW*zoom} height={svgH*zoom} style={{display:"block"}}>
+        <g transform={`scale(${zoom})`}>
+          <TreeLines members={members}/>
+          {members.map(m=><PersonNode key={m.id} m={m} onTap={tapCard}/>)}
         </g>
       </svg>
-      {saving&&<div style={{position:"fixed",top:62,left:"50%",transform:"translateX(-50%)",
-        background:"#007AFF",color:"#fff",padding:"5px 16px",borderRadius:20,fontSize:13,zIndex:20}}>Guardando…</div>}
-      {profile&&!form&&(
-        <ProfileSheet m={profile} members={laid} photos={photos}
-          onEdit={()=>setForm({...members.find(m=>m.id===profile.id)||profile})}
-          onDelete={()=>deleteMember(profile.id)} onClose={()=>setProfile(null)}/>
-      )}
-      {form&&<FormSheet initial={form} members={laid} photos={photos} onSave={saveMember} onClose={()=>setForm(null)}/>}
     </div>
-  );
+
+    {/* View profile */}
+    {panel==="view"&&selM&&sheet(getDisplay(selM).full,close,<div style={{display:"flex",flexDirection:"column",gap:8}}>
+      <div style={{textAlign:"center",padding:8}}>
+        <Avatar photo={selM.photo} name={getDisplay(selM).full} size={100} gender={selM.gender} deceased={selM.deceased}/>
+        <div style={{fontSize:20,fontWeight:700,marginTop:8}}>{selM.deceased?"† ":""}{getDisplay(selM).full}</div>
+        {calcAge(selM.birthDate,selM.deceased?selM.deathDate:null)!==null&&<div style={{color:"#888",fontSize:14}}>{calcAge(selM.birthDate,selM.deceased?selM.deathDate:null)} años</div>}
+      </div>
+      <div style={{background:"#fff",borderRadius:12,overflow:"hidden"}}>
+        {selM.birthDate&&<div style={{padding:"10px 14px",borderBottom:"0.5px solid rgba(60,60,67,0.12)"}}><span style={{color:"#888",fontSize:12}}>Nacimiento</span><div>{selM.birthDate}{selM.birthPlace?` · ${selM.birthPlace}`:""}</div></div>}
+        {selM.residence&&<div style={{padding:"10px 14px",borderBottom:"0.5px solid rgba(60,60,67,0.12)"}}><span style={{color:"#888",fontSize:12}}>Residencia</span><div>{selM.residence}</div></div>}
+        {selM.deceased&&<div style={{padding:"10px 14px"}}><span style={{color:"#888",fontSize:12}}>Fallecimiento</span><div>{selM.deathDate||""}{selM.deathPlace?` · Restos: ${selM.deathPlace}`:""}</div></div>}
+      </div>
+      {(selM.phone||selM.email||selM.facebook||selM.instagram)&&<div style={{display:"flex",justifyContent:"center",gap:12,padding:8}}>
+        {selM.phone&&<a href={`tel:${selM.phone}`} style={{width:44,height:44,borderRadius:22,background:"#34C759",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontSize:20}}>📞</span></a>}
+        {selM.email&&<a href={`mailto:${selM.email}`} style={{width:44,height:44,borderRadius:22,background:"#007AFF",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontSize:20}}>✉️</span></a>}
+        {selM.facebook&&<a href={selM.facebook.startsWith("http")?selM.facebook:`https://facebook.com/${selM.facebook}`} target="_blank" style={{width:44,height:44,borderRadius:22,background:"#1877F2",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontSize:16,fontWeight:800}}>f</span></a>}
+        {selM.instagram&&<a href={selM.instagram.startsWith("http")?selM.instagram:`https://instagram.com/${selM.instagram}`} target="_blank" style={{width:44,height:44,borderRadius:22,background:"linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontSize:16,fontWeight:700}}>ig</span></a>}
+      </div>}
+      <div style={{display:"flex",gap:8,padding:"8px 0"}}>
+        <button onClick={openEdit} style={{flex:1,padding:"12px 0",background:"#007AFF",border:"none",borderRadius:12,color:"#fff",fontSize:16,fontWeight:600,cursor:"pointer"}}>Editar</button>
+        <button onClick={openPartners} style={{flex:1,padding:"12px 0",background:"#34C759",border:"none",borderRadius:12,color:"#fff",fontSize:16,fontWeight:600,cursor:"pointer"}}>Parejas</button>
+        <button onClick={removePerson} style={{padding:"12px 16px",background:"#FF3B30",border:"none",borderRadius:12,color:"#fff",fontSize:16,fontWeight:600,cursor:"pointer"}}>Eliminar</button>
+      </div>
+    </div>)}
+
+    {/* Add/Edit form */}
+    {(panel==="add"||panel==="edit")&&sheet(panel==="add"?"Agregar":"Editar",close,<div>
+      <PhotoUpload photo={form.photo} gender={form.gender} name={form.firstName} onUp={d=>setForm({...form,photo:d})}/>
+      <Toggle value={form.gender==="F"} onChange={v=>setForm({...form,gender:v?"F":"M"})} labelA="Masculino" labelB="Femenino"/>
+      <SecTitle>Nombre</SecTitle>
+      <Inp value={form.firstName} onChange={e=>setForm({...form,firstName:e.target.value})} placeholder="Nombre(s)"/>
+      <Inp value={form.lastName1} onChange={e=>setForm({...form,lastName1:e.target.value})} placeholder="Apellido paterno"/>
+      <Inp value={form.lastName2} onChange={e=>setForm({...form,lastName2:e.target.value})} placeholder="Apellido materno"/>
+      <SecTitle>Nacimiento</SecTitle>
+      <Inp type="date" value={form.birthDate} onChange={e=>setForm({...form,birthDate:e.target.value})}/>
+      <Inp value={form.birthPlace} onChange={e=>setForm({...form,birthPlace:e.target.value})} placeholder="Lugar de nacimiento"/>
+      <SecTitle>Residencia</SecTitle>
+      <Inp value={form.residence} onChange={e=>setForm({...form,residence:e.target.value})} placeholder="Lugar de residencia actual"/>
+      <SecTitle>Contacto</SecTitle>
+      <Inp type="tel" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="Teléfono"/>
+      <Inp type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="Correo electrónico"/>
+      <Inp value={form.facebook} onChange={e=>setForm({...form,facebook:e.target.value})} placeholder="Facebook (URL o usuario)"/>
+      <Inp value={form.instagram} onChange={e=>setForm({...form,instagram:e.target.value})} placeholder="Instagram (URL o usuario)"/>
+      <Toggle value={form.deceased||false} onChange={v=>setForm({...form,deceased:v})} labelA="Vivo/a" labelB="Fallecido/a"/>
+      {form.deceased&&<><SecTitle>Fallecimiento</SecTitle>
+        <Inp type="date" value={form.deathDate} onChange={e=>setForm({...form,deathDate:e.target.value})}/>
+        <Inp value={form.deathPlace} onChange={e=>setForm({...form,deathPlace:e.target.value})} placeholder="Lugar donde descansan sus restos"/>
+      </>}
+      <SecTitle>Padres</SecTitle>
+      <Sel value={form.parent1Id} onChange={e=>setForm({...form,parent1Id:e.target.value})}>
+        <option value="">Padre/Madre 1 — Ninguno</option>
+        {members.filter(m=>m.id!==sel&&(!form.birthDate||!m.birthDate||m.birthDate<form.birthDate||m.deceased)).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
+      </Sel>
+      <Sel value={form.parent2Id} onChange={e=>setForm({...form,parent2Id:e.target.value})}>
+        <option value="">Padre/Madre 2 — Ninguno</option>
+        {members.filter(m=>m.id!==sel&&m.id!==form.parent1Id&&(!form.birthDate||!m.birthDate||m.birthDate<form.birthDate||m.deceased)).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
+      </Sel>
+      <button onClick={saveForm} style={{width:"100%",marginTop:16,padding:"14px 0",background:"#007AFF",border:"none",borderRadius:12,color:"#fff",fontSize:17,fontWeight:600,cursor:"pointer"}}>
+        {panel==="add"?"Agregar":"Guardar cambios"}
+      </button>
+    </div>)}
+
+    {/* Partners */}
+    {panel==="partners"&&selM&&sheet("Parejas de "+getDisplay(selM).first,close,<div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {selM.partnerships.map(pr=>{const p=members.find(m=>m.id===pr.partnerId);if(!p)return null;
+        return <div key={pr.partnerId} style={{background:"#fff",borderRadius:12,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <Avatar photo={p.photo} name={getDisplay(p).full} size={40} gender={p.gender}/>
+            <div><div style={{fontWeight:600}}>{getDisplay(p).full}</div><div style={{fontSize:12,color:pr.type==="actual"?"#34C759":"#888"}}>{pr.type==="actual"?"Pareja actual":"Ex pareja"}</div></div>
+          </div>
+          <button onClick={()=>removePartner(pr.partnerId)} style={{width:28,height:28,borderRadius:14,background:"rgba(120,120,128,0.12)",border:"none",color:"#FF3B30",fontSize:16,fontWeight:700,cursor:"pointer"}}>×</button>
+        </div>;})}
+      <SecTitle>Agregar pareja</SecTitle>
+      <Sel value={pForm.partnerId} onChange={e=>setPForm({...pForm,partnerId:e.target.value})}>
+        <option value="">Seleccionar persona…</option>
+        {members.filter(m=>m.id!==sel&&!selM.partnerships.find(x=>x.partnerId===m.id)).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
+      </Sel>
+      <Sel value={pForm.type} onChange={e=>setPForm({...pForm,type:e.target.value})}>
+        <option value="actual">Pareja actual</option>
+        <option value="anterior">Ex pareja</option>
+      </Sel>
+      <button onClick={addPartner} disabled={!pForm.partnerId} style={{width:"100%",padding:"12px 0",background:pForm.partnerId?"#007AFF":"rgba(120,120,128,0.12)",border:"none",borderRadius:12,color:pForm.partnerId?"#fff":"#999",fontSize:16,fontWeight:600,cursor:pForm.partnerId?"pointer":"default"}}>Agregar pareja</button>
+    </div>)}
+  </div>;
 }
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
