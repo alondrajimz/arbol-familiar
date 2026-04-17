@@ -310,7 +310,17 @@ function App(){
     setPhotos(getPhotos());
     db.on("value",snap=>{
       const data=snap.val();
-      setMembers(data?Object.values(data):[]);
+      console.log("Firebase snapshot:", data);
+      if(!data){setMembers([]);return;}
+      // Firebase converts arrays to objects {0:{...},1:{...}} — fix partnerships
+      const ms=Object.entries(data).map(([key,m])=>{
+        const id=m.id||key;
+        let ps=m.partnerships;
+        if(ps&&!Array.isArray(ps))ps=Object.values(ps);
+        return {...m,id,partnerships:ps||[]};
+      });
+      console.log("Members parsed:", ms.length, ms);
+      setMembers(ms);
     });
     return()=>db.off("value");
   },[]);
