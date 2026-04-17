@@ -51,6 +51,8 @@ const getPhotos=()=>{try{return JSON.parse(localStorage.getItem(PK)||"{}");}catc
 function autoLayout(members){
   if(!members.length)return[];
   const by={};members.forEach(m=>by[m.id]=m);
+
+  // Assign generations via BFS from roots
   const gen={};
   members.forEach(m=>{if(!m.parent1Id&&!m.parent2Id)gen[m.id]=0;});
   let chg=true,itr=0;
@@ -60,50 +62,74 @@ function autoLayout(members){
     if(gs.length){gen[m.id]=Math.max(...gs)+1;chg=true;}
   });}
   members.forEach(m=>{if(gen[m.id]==null)gen[m.id]=0;});
-  chg=true;itr=0;while(chg&&itr++<100){chg=false;members.forEach(m=>(m.partnerships||[]).forEach(pr=>{
+  // Partners share the same (lower) generation
+  chg=true;itr=0;
+  while(chg&&itr++<100){chg=false;members.forEach(m=>(m.partnerships||[]).forEach(pr=>{
     if(gen[pr.partnerId]==null)return;
     const g=Math.min(gen[m.id],gen[pr.partnerId]);
     if(gen[m.id]!==g){gen[m.id]=g;chg=true;}
     if(gen[pr.partnerId]!==g){gen[pr.partnerId]=g;chg=true;}
   }));}
-  chg=true;itr=0;while(chg&&itr++<100){chg=false;members.forEach(m=>{
+  // Children must be strictly below every parent
+  chg=true;itr=0;
+  while(chg&&itr++<100){chg=false;members.forEach(m=>{
     const gs=[m.parent1Id,m.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!=null);
     if(!gs.length)return;const n=Math.max(...gs)+1;
     if(gen[m.id]<n){gen[m.id]=n;chg=true;}
   });}
-  const XG=170,YG=200,YT=100;
+
+  const CG=100; // couple: center-to-center (≈70px avatar + 30px gap)
+  const NG=170; // min space between separate nodes/units
+  const YG=200,YT=100;
   const maxG=Math.max(...Object.values(gen),0);
-  const pos={};
+  const posX={}; // stores final x per member id
+
+  // children map
   const kids={};members.forEach(m=>[m.parent1Id,m.parent2Id].filter(Boolean).forEach(pid=>{
     if(!kids[pid])kids[pid]=[];if(!kids[pid].includes(m.id))kids[pid].push(m.id);
   }));
+
+  // Bottom-up: position from deepest generation upward
   for(let g=maxG;g>=0;g--){
-    const gms=members.filter(m=>gen[m.id]===g).sort((a,b)=>(a.birthDate||"").localeCompare(b.birthDate||""));
+    const gms=members.filter(m=>gen[m.id]===g)
+      .sort((a,b)=>(a.birthDate||"").localeCompare(b.birthDate||""));
+    // Build units: couple blocks or singles
     const done=new Set();const units=[];
     gms.forEach(m=>{
       if(done.has(m.id))return;done.add(m.id);
       const pr=(m.partnerships||[]).find(p=>gen[p.partnerId]===g&&!done.has(p.partnerId));
-      if(pr){const pm=by[pr.partnerId];done.add(pm.id);
-        const ml=m.gender==="M"||(m.gender!=="F"&&pm.gender==="F");
-        units.push(ml?[m.id,pm.id]:[pm.id,m.id]);}
-      else units.push([m.id]);
-    });
-    let cur=100;
-    units.forEach((ids,i)=>{
-      const cxs=[];ids.forEach(id=>(kids[id]||[]).forEach(cid=>{if(pos[cid])cxs.push(pos[cid].x);}));
-      const hint=cxs.length?cxs.reduce((a,b)=>a+b)/cxs.length:null;
-      const y=YT+g*YG;
-      if(ids.length===2){
-        const half=XG*0.55;
-        const cx=Math.max(hint!=null?hint:cur+half,cur+half);
-        pos[ids[0]]={x:cx-half,y};pos[ids[1]]={x:cx+half,y};cur=cx+half+XG*0.4;
+      if(pr){
+        const pm=by[pr.partnerId];done.add(pm.id);
+        // man on left, woman on right
+        const mLeft=m.gender==="M"||(m.gender!=="F"&&pm.gender==="F");
+        units.push({couple:true,ids:mLeft?[m.id,pm.id]:[pm.id,m.id]});
       } else {
-        const x=Math.max(hint!=null?hint:cur,cur);
-        pos[ids[0]]={x,y};cur=x+XG;
+        units.push({couple:false,ids:[m.id]});
+      }
+    });
+
+    // Place units: target center = avg x of all children already placed below
+    let cur=80;
+    units.forEach(u=>{
+      const cxs=[];
+      u.ids.forEach(id=>(kids[id]||[]).forEach(cid=>{
+        if(posX[cid]!=null)cxs.push(posX[cid]);
+      }));
+      const ideal=cxs.length?cxs.reduce((a,b)=>a+b)/cxs.length:null;
+      if(u.couple){
+        const cx=Math.max(ideal!=null?ideal:cur+CG/2, cur+CG/2);
+        posX[u.ids[0]]=cx-CG/2; // man (left)
+        posX[u.ids[1]]=cx+CG/2; // woman (right)
+        cur=cx+CG/2+NG*0.6;
+      } else {
+        const x=Math.max(ideal!=null?ideal:cur, cur);
+        posX[u.ids[0]]=x;
+        cur=x+NG;
       }
     });
   }
-  return members.map(m=>({...m,...(pos[m.id]||{x:100,y:YT})}));
+
+  return members.map(m=>({...m,x:posX[m.id]!=null?posX[m.id]:80,y:YT+gen[m.id]*YG}));
 }
 
 function Lines({members}){
@@ -114,8 +140,8 @@ function Lines({members}){
     if(drawn.has(key))return;drawn.add(key);
     const sp=by[pr.partnerId];if(!sp||Math.abs(m.y-sp.y)>5)return;
     const isEx=pr.type==="anterior";
-    const x1=Math.min(m.x,sp.x)+38,x2=Math.max(m.x,sp.x)-38;
-    if(x1>=x2)return;
+    const x1=Math.min(m.x,sp.x)+36,x2=Math.max(m.x,sp.x)-36;
+    if(x2<=x1)return;
     segs.push(<line key={`pt-${key}`} x1={x1} y1={m.y} x2={x2} y2={m.y}
       stroke={isEx?"#ddd":"#bbb"} strokeWidth={2} strokeDasharray={isEx?"8 5":"none"}/>);
   }));
