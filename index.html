@@ -57,238 +57,97 @@ function parsePartners(p){if(!p)return[];if(Array.isArray(p))return p;return Obj
 
 /* ── LAYOUT ALGORITHM ── */
 function autoLayout(members){
+  try{
   if(!members.length)return members;
   const m=members.map(x=>({...x}));
   const byId=Object.fromEntries(m.map(x=>[x.id,x]));
 
-  // Step 1: Assign generations via BFS from roots
+  // Step 1: gen 0 = roots, children = parent gen + 1
   const gen={};
-  // Find roots: no parents
-  const roots=m.filter(x=>!x.parent1Id&&!x.parent2Id);
-  // If no roots found, everyone is root
-  if(!roots.length)m.forEach(x=>gen[x.id]=0);
-  else{
-    const queue=roots.map(r=>{gen[r.id]=0;return r.id});
-    // BFS children
-    let safety=0;
-    while(queue.length&&safety++<500){
-      const pid=queue.shift();
-      const children=m.filter(c=>c.parent1Id===pid||c.parent2Id===pid);
-      children.forEach(c=>{
-        const parentGen=gen[pid]||0;
-        const newGen=parentGen+1;
-        if(gen[c.id]===undefined||gen[c.id]<newGen){
-          gen[c.id]=newGen;
-          queue.push(c.id);
-        }
-      });
-    }
-    // Assign gen 0 to anyone still unassigned
-    m.forEach(x=>{if(gen[x.id]===undefined)gen[x.id]=0;});
-  }
+  m.forEach(x=>{if(!x.parent1Id&&!x.parent2Id)gen[x.id]=0;});
+  let chg=true,it=0;
+  while(chg&&it++<100){chg=false;m.forEach(x=>{
+    if(gen[x.id]!=null)return;
+    const gs=[x.parent1Id,x.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!=null);
+    if(gs.length){gen[x.id]=Math.max(...gs)+1;chg=true;}
+  });}
+  m.forEach(x=>{if(gen[x.id]==null)gen[x.id]=0;});
 
-  // Step 2: Couples must be at same generation (use the LOWER number = higher position)
-  let changed=true,iter=0;
-  while(changed&&iter++<50){
-    changed=false;
-    m.forEach(p=>{
-      (p.partnerships||[]).forEach(pr=>{
-        const a=gen[p.id],b=gen[pr.partnerId];
-        if(a!==undefined&&b!==undefined&&a!==b){
-          const minG=Math.min(a,b);
-          if(gen[p.id]!==minG){gen[p.id]=minG;changed=true;}
-          if(gen[pr.partnerId]!==minG){gen[pr.partnerId]=minG;changed=true;}
-        }
-      });
+  // Steps 2-4 in one outer loop until stable (max 100 passes)
+  chg=true;it=0;
+  while(chg&&it++<100){
+    chg=false;
+    // Partners → same gen (min of the two = higher in tree)
+    m.forEach(x=>parsePartners(x.partnerships).forEach(pr=>{
+      if(gen[pr.partnerId]==null)return;
+      const g=Math.min(gen[x.id],gen[pr.partnerId]);
+      if(gen[x.id]!==g){gen[x.id]=g;chg=true;}
+      if(gen[pr.partnerId]!==g){gen[pr.partnerId]=g;chg=true;}
+    }));
+    // Siblings → same gen (max = deepest sibling's row, keeps all on one row)
+    const sibs={};
+    m.forEach(x=>[x.parent1Id,x.parent2Id].filter(Boolean).forEach(pid=>{
+      if(!sibs[pid])sibs[pid]=[];
+      if(!sibs[pid].includes(x.id))sibs[pid].push(x.id);
+    }));
+    Object.values(sibs).forEach(ids=>{
+      const maxG=Math.max(...ids.map(id=>gen[id]??0));
+      ids.forEach(id=>{if((gen[id]??0)!==maxG){gen[id]=maxG;chg=true;}});
+    });
+    // Children strictly below every parent
+    m.forEach(x=>{
+      const gs=[x.parent1Id,x.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!=null);
+      if(!gs.length)return;
+      const n=Math.max(...gs)+1;
+      if((gen[x.id]??0)<n){gen[x.id]=n;chg=true;}
     });
   }
 
-  // Step 3: Ensure children are ALWAYS below parents
-  changed=true;iter=0;
-  while(changed&&iter++<50){
-    changed=false;
-    m.forEach(c=>{
-      [c.parent1Id,c.parent2Id].filter(Boolean).forEach(pid=>{
-        if(gen[pid]!==undefined&&gen[c.id]!==undefined&&gen[c.id]<=gen[pid]){
-          gen[c.id]=gen[pid]+1;
-          changed=true;
-        }
-      });
-    });
-  }
+  // CG = couple center-to-center: 70px avatar + 30px gap = 100px
+  const CG=100,NG=160,maxG=Math.max(...Object.values(gen),0);
+  const posX={}; // center x per id
+  const kids={};
+  m.forEach(x=>[x.parent1Id,x.parent2Id].filter(Boolean).forEach(pid=>{
+    if(!kids[pid])kids[pid]=[];
+    if(!kids[pid].includes(x.id))kids[pid].push(x.id);
+  }));
 
-  // Step 4: Siblings at same generation
-  changed=true;iter=0;
-  while(changed&&iter++<50){
-    changed=false;
-    m.forEach(a=>{
-      m.forEach(b=>{
-        if(a.id===b.id)return;
-        const share=(a.parent1Id&&(a.parent1Id===b.parent1Id||a.parent1Id===b.parent2Id))||
-                     (a.parent2Id&&(a.parent2Id===b.parent1Id||a.parent2Id===b.parent2Id));
-        if(share&&gen[a.id]!==gen[b.id]){
-          const maxG=Math.max(gen[a.id],gen[b.id]);
-          gen[a.id]=maxG;gen[b.id]=maxG;changed=true;
-        }
-      });
-    });
-  }
-
-  // Re-check children below parents
-  changed=true;iter=0;
-  while(changed&&iter++<50){
-    changed=false;
-    m.forEach(c=>{
-      [c.parent1Id,c.parent2Id].filter(Boolean).forEach(pid=>{
-        if(gen[pid]!==undefined&&gen[c.id]!==undefined&&gen[c.id]<=gen[pid]){
-          gen[c.id]=gen[pid]+1;changed=true;
-        }
-      });
-    });
-  }
-
-  // Step 5: Build generation rows
-  const maxGen=Math.max(...Object.values(gen));
-  const rows={};
-  for(let g=0;g<=maxGen;g++)rows[g]=m.filter(x=>gen[x.id]===g);
-
-  // Step 6: Sort within each row & build couple blocks
-  // For each generation, group couples together, then singles
-  const NODE_W=150, COUPLE_GAP=30, GROUP_GAP=60;
-
-  // Identify couple pairs
-  function getCoupleId(person){
-    const partners=parsePartners(person.partnerships);
-    if(!partners.length)return null;
-    // Find partner in same generation
-    for(const pr of partners){
-      if(gen[pr.partnerId]===gen[person.id])return pr.partnerId;
-    }
-    return null;
-  }
-
-  // For bottom-up positioning, first handle leaves, then go up
-  const posX={};
-
-  // Process from bottom to top
-  for(let g=maxGen;g>=0;g--){
-    const row=rows[g]||[];
-    if(!row.length)continue;
-
-    // Build blocks: [{type:'couple',left:id,right:id} or {type:'single',id:id}]
-    const used=new Set();
-    const blocks=[];
-    // Sort row: by birthDate, couples together
-    const sorted=[...row].sort((a,b)=>{
-      const da=a.birthDate||"9999",db=b.birthDate||"9999";
-      return da.localeCompare(db);
-    });
-
-    sorted.forEach(p=>{
-      if(used.has(p.id))return;
-      const partnerId=getCoupleId(p);
-      if(partnerId&&!used.has(partnerId)&&gen[partnerId]===g){
-        const partner=byId[partnerId];
-        if(partner){
-          used.add(p.id);used.add(partnerId);
-          // Man left, woman right
-          if(p.gender==="M"){blocks.push({type:"couple",left:p.id,right:partnerId});}
-          else{blocks.push({type:"couple",left:partnerId,right:p.id});}
-          return;
-        }
+  // X positions: bottom-up
+  for(let g=maxG;g>=0;g--){
+    const gms=m.filter(x=>gen[x.id]===g).sort((a,b)=>(a.birthDate||"").localeCompare(b.birthDate||""));
+    const done=new Set();const units=[];
+    gms.forEach(x=>{
+      if(done.has(x.id))return;done.add(x.id);
+      const pr=parsePartners(x.partnerships).find(p=>byId[p.partnerId]&&gen[p.partnerId]===g&&!done.has(p.partnerId));
+      if(pr){
+        const pm=byId[pr.partnerId];done.add(pm.id);
+        const mLeft=x.gender==="M"||(x.gender!=="F"&&pm.gender==="F");
+        units.push({couple:true,ids:mLeft?[x.id,pm.id]:[pm.id,x.id]});
+      } else {
+        units.push({couple:false,ids:[x.id]});
       }
-      used.add(p.id);
-      blocks.push({type:"single",id:p.id});
     });
-
-    // Sort blocks: try to put parent-blocks above their children
-    // For bottom generations, just spread evenly
-    // For upper generations, center over children
-
-    if(g===maxGen||!Object.keys(posX).length){
-      // Bottom row or first row: spread evenly
-      let cursor=0;
-      blocks.forEach((bl,i)=>{
-        if(bl.type==="couple"){
-          posX[bl.left]=cursor;
-          posX[bl.right]=cursor+NODE_W+COUPLE_GAP;
-          cursor+=2*NODE_W+COUPLE_GAP+GROUP_GAP;
-        } else {
-          posX[bl.id]=cursor;
-          cursor+=NODE_W+GROUP_GAP;
-        }
-      });
-    } else {
-      // Upper rows: center each block over its children
-      const blockPositions=[];
-
-      blocks.forEach(bl=>{
-        const ids=bl.type==="couple"?[bl.left,bl.right]:[bl.id];
-        // Find all children of these people
-        const childXs=[];
-        m.forEach(c=>{
-          if(posX[c.id]!==undefined){
-            const isChild=ids.includes(c.parent1Id)||ids.includes(c.parent2Id);
-            if(isChild)childXs.push(posX[c.id]);
-          }
-        });
-
-        let centerX;
-        if(childXs.length){
-          centerX=(Math.min(...childXs)+Math.max(...childXs))/2;
-        } else {
-          // No children positioned yet, use default
-          centerX=blockPositions.length?(blockPositions[blockPositions.length-1].right+GROUP_GAP):0;
-        }
-
-        if(bl.type==="couple"){
-          const totalW=2*NODE_W+COUPLE_GAP;
-          const startX=centerX-totalW/2;
-          blockPositions.push({bl,left:startX,right:startX+totalW,ids});
-          posX[bl.left]=startX;
-          posX[bl.right]=startX+NODE_W+COUPLE_GAP;
-        } else {
-          const startX=centerX-NODE_W/2;
-          blockPositions.push({bl,left:startX,right:startX+NODE_W,ids});
-          posX[bl.id]=startX;
-        }
-      });
-
-      // Fix collisions: push right if overlapping
-      blockPositions.sort((a,b)=>a.left-b.left);
-      for(let i=1;i<blockPositions.length;i++){
-        const prev=blockPositions[i-1];
-        const curr=blockPositions[i];
-        const minLeft=prev.right+GROUP_GAP;
-        if(curr.left<minLeft){
-          const shift=minLeft-curr.left;
-          curr.left+=shift;curr.right+=shift;
-          // Update posX for this block
-          const bl=curr.bl;
-          if(bl.type==="couple"){
-            posX[bl.left]=curr.left;
-            posX[bl.right]=curr.left+NODE_W+COUPLE_GAP;
-          } else {
-            posX[bl.id]=curr.left;
-          }
-        }
+    let cur=80;
+    units.forEach(u=>{
+      const cxs=[];
+      u.ids.forEach(id=>(kids[id]||[]).forEach(cid=>{if(posX[cid]!=null)cxs.push(posX[cid]);}));
+      const ideal=cxs.length?cxs.reduce((a,b)=>a+b)/cxs.length:null;
+      if(u.couple){
+        const cx=Math.max(ideal??cur+CG/2,cur+CG/2);
+        posX[u.ids[0]]=cx-CG/2; // man left
+        posX[u.ids[1]]=cx+CG/2; // woman right
+        cur=cx+CG/2+NG*0.5;
+      } else {
+        const x=Math.max(ideal??cur,cur);
+        posX[u.ids[0]]=x;
+        cur=x+NG;
       }
-    }
+    });
   }
 
-  // Step 7: Center everything
-  const allX=Object.values(posX);
-  const minX=Math.min(...allX);
-  const maxX=Math.max(...allX);
-  const offsetX=80-minX; // left padding
-
-  // Apply positions
-  m.forEach(p=>{
-    p.x=(posX[p.id]||0)+offsetX+NODE_W/2;
-    p.y=gen[p.id]*200+100;
-  });
-
+  m.forEach(x=>{x.x=posX[x.id]??80;x.y=(gen[x.id]??0)*220+100;});
   return m;
+  }catch(e){console.error("autoLayout error:",e);return members.map((p,i)=>({...p,x:100+i*160,y:100}));}
 }
 
 /* ── Firebase helpers ── */
