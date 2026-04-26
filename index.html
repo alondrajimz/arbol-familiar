@@ -103,46 +103,106 @@ function autoLayout(members){
     });
   }
 
-  // CG = couple center-to-center: 70px avatar + 30px gap = 100px
-  const CG=100,NG=160,maxG=Math.max(...Object.values(gen),0);
-  const posX={}; // center x per id
-  const kids={};
-  m.forEach(x=>[x.parent1Id,x.parent2Id].filter(Boolean).forEach(pid=>{
-    if(!kids[pid])kids[pid]=[];
-    if(!kids[pid].includes(x.id))kids[pid].push(x.id);
-  }));
+  const CG=100; // couple center-to-center (70px avatar + 30px gap)
+  const MG=160; // gap between members of same family
+  const FG=220; // gap between different families
+  const maxG=Math.max(...Object.values(gen),0);
+  const posX={};
 
-  // X positions: bottom-up
+  // Build family key for each member: sorted parent ids
+  function famKey(x){return[x.parent1Id||"",x.parent2Id||""].sort().join("|");}
+  // Direct children of a specific person (not via their partner)
+  function directKids(id){return m.filter(c=>c.parent1Id===id||c.parent2Id===id);}
+
+  // X positions: bottom-up, generation by generation
   for(let g=maxG;g>=0;g--){
-    const gms=m.filter(x=>gen[x.id]===g).sort((a,b)=>(a.birthDate||"").localeCompare(b.birthDate||""));
-    const done=new Set();const units=[];
+    const gms=m.filter(x=>gen[x.id]===g);
+
+    // A) Group by family (same parents), sort each family by birthDate
+    const famMap={};
     gms.forEach(x=>{
-      if(done.has(x.id))return;done.add(x.id);
-      const pr=parsePartners(x.partnerships).find(p=>byId[p.partnerId]&&gen[p.partnerId]===g&&!done.has(p.partnerId));
-      if(pr){
-        const pm=byId[pr.partnerId];done.add(pm.id);
-        const mLeft=x.gender==="M"||(x.gender!=="F"&&pm.gender==="F");
-        units.push({couple:true,ids:mLeft?[x.id,pm.id]:[pm.id,x.id]});
-      } else {
-        units.push({couple:false,ids:[x.id]});
-      }
+      const k=famKey(x);
+      if(!famMap[k])famMap[k]=[];
+      famMap[k].push(x);
     });
-    let cur=80;
-    units.forEach(u=>{
-      const cxs=[];
-      u.ids.forEach(id=>(kids[id]||[]).forEach(cid=>{if(posX[cid]!=null)cxs.push(posX[cid]);}));
-      const ideal=cxs.length?cxs.reduce((a,b)=>a+b)/cxs.length:null;
-      if(u.couple){
-        const cx=Math.max(ideal??cur+CG/2,cur+CG/2);
-        posX[u.ids[0]]=cx-CG/2; // man left
-        posX[u.ids[1]]=cx+CG/2; // woman right
-        cur=cx+CG/2+NG*0.5;
-      } else {
-        const x=Math.max(ideal??cur,cur);
-        posX[u.ids[0]]=x;
-        cur=x+NG;
-      }
+    Object.values(famMap).forEach(fam=>fam.sort((a,b)=>(a.birthDate||"").localeCompare(b.birthDate||"")));
+
+    // B+C) Build ordered list of "blocks" (couple or single) across all families
+    // Families with parents are sorted by their parents' already-placed X
+    const famKeys=Object.keys(famMap).sort((ka,kb)=>{
+      const ax=famMap[ka][0];const bx=famMap[kb][0];
+      const aParentX=Math.min(...[ax.parent1Id,ax.parent2Id].filter(Boolean).map(id=>posX[id]??Infinity));
+      const bParentX=Math.min(...[bx.parent1Id,bx.parent2Id].filter(Boolean).map(id=>posX[id]??Infinity));
+      return aParentX-bParentX;
     });
+
+    // For each family, build couple/single units
+    function buildUnits(fam){
+      const done=new Set();const units=[];
+      fam.forEach(x=>{
+        if(done.has(x.id))return;done.add(x.id);
+        const pr=parsePartners(x.partnerships).find(p=>byId[p.partnerId]&&gen[p.partnerId]===g&&!done.has(p.partnerId));
+        if(pr){
+          const pm=byId[pr.partnerId];done.add(pm.id);
+          const mLeft=x.gender==="M"||(x.gender!=="F"&&pm.gender==="F");
+          units.push({couple:true,ids:mLeft?[x.id,pm.id]:[pm.id,x.id]});
+        } else {
+          units.push({couple:false,ids:[x.id]});
+        }
+      });
+      return units;
+    }
+
+    if(g===maxG){
+      // C) Bottom generation: lay out families sequentially with FG between families
+      let cur=80;
+      famKeys.forEach((fk,fi)=>{
+        const units=buildUnits(famMap[fk]);
+        units.forEach(u=>{
+          if(u.couple){
+            posX[u.ids[0]]=cur;
+            posX[u.ids[1]]=cur+CG;
+            cur+=CG+MG;
+          } else {
+            posX[u.ids[0]]=cur;
+            cur+=MG;
+          }
+        });
+        cur+=FG-MG; // extra gap between families
+      });
+    } else {
+      // D) Upper generations: center each unit over its own direct children
+      // Collect all units for this generation in family order
+      const allUnits=[];
+      famKeys.forEach(fk=>buildUnits(famMap[fk]).forEach(u=>allUnits.push(u)));
+
+      let cur=80;
+      allUnits.forEach(u=>{
+        // Ideal X = midpoint of this unit's own direct children
+        const childXs=[];
+        u.ids.forEach(id=>directKids(id).forEach(c=>{if(posX[c.id]!=null)childXs.push(posX[c.id]);}));
+        const ideal=childXs.length?(Math.min(...childXs)+Math.max(...childXs))/2:null;
+
+        if(u.couple){
+          const cx=Math.max(ideal??cur+CG/2, cur+CG/2);
+          posX[u.ids[0]]=cx-CG/2;
+          posX[u.ids[1]]=cx+CG/2;
+          cur=cx+CG/2+MG;
+        } else {
+          const x=Math.max(ideal??cur, cur);
+          posX[u.ids[0]]=x;
+          cur=x+MG;
+        }
+      });
+    }
+  }
+
+  // E) Center everything horizontally
+  const allXs=Object.values(posX);
+  if(allXs.length){
+    const mid=(Math.min(...allXs)+Math.max(...allXs))/2;
+    const shift=window.innerWidth/2-mid;
+    Object.keys(posX).forEach(id=>{posX[id]+=shift;});
   }
 
   m.forEach(x=>{x.x=posX[x.id]??80;x.y=(gen[x.id]??0)*220+100;});
