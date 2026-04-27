@@ -180,7 +180,11 @@ function autoLayout(members){
       allUnits.forEach(u=>{
         // Ideal X = midpoint of this unit's own direct children
         const childXs=[];
-        u.ids.forEach(id=>directKids(id).forEach(c=>{if(posX[c.id]!=null)childXs.push(posX[c.id]);}));
+        if(u.couple){
+          m.filter(c=>{const p=[c.parent1Id,c.parent2Id];return p.includes(u.ids[0])&&p.includes(u.ids[1]);}).forEach(c=>{if(posX[c.id]!=null)childXs.push(posX[c.id]);});
+        } else {
+          directKids(u.ids[0]).forEach(c=>{if(posX[c.id]!=null)childXs.push(posX[c.id]);});
+        }
         const ideal=childXs.length?(Math.min(...childXs)+Math.max(...childXs))/2:null;
 
         if(u.couple){
