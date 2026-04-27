@@ -171,10 +171,14 @@ function autoLayout(members){
         cur+=FG-MG; // extra gap between families
       });
     } else {
-      // D) Upper generations: center each unit over its own direct children
-      // Collect all units for this generation in family order
-      const allUnits=[];
-      famKeys.forEach(fk=>buildUnits(famMap[fk]).forEach(u=>allUnits.push(u)));
+      // D) Upper generations: build units across ALL members of this gen so
+      // couples with different-family parents are correctly paired
+      const allMembers=[];famKeys.forEach(fk=>famMap[fk].forEach(x=>allMembers.push(x)));
+      const allUnits=buildUnits(allMembers);
+      allUnits.sort((a,b)=>{
+        function avgChildX(u){const xs=[];u.ids.forEach(id=>directKids(id).forEach(c=>{if(posX[c.id]!=null)xs.push(posX[c.id]);}));return xs.length?xs.reduce((s,v)=>s+v)/xs.length:Infinity;}
+        return avgChildX(a)-avgChildX(b);
+      });
 
       let cur=80;
       allUnits.forEach(u=>{
