@@ -91,8 +91,9 @@ function autoLayout(members){
       if(!sibs[pid].includes(x.id))sibs[pid].push(x.id);
     }));
     Object.values(sibs).forEach(ids=>{
-      const maxG=Math.max(...ids.map(id=>gen[id]??0));
-      ids.forEach(id=>{if((gen[id]??0)!==maxG){gen[id]=maxG;chg=true;}});
+      const parentGens=ids.map(id=>{const x=byId[id];const gs=[x.parent1Id,x.parent2Id].filter(Boolean).map(p=>gen[p]).filter(g=>g!=null);return gs.length?Math.max(...gs)+1:gen[id]??0;});
+      const targetG=Math.max(...parentGens);
+      ids.forEach(id=>{if((gen[id]??0)!==targetG){gen[id]=targetG;chg=true;}});
     });
     // Children strictly below every parent
     m.forEach(x=>{
