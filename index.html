@@ -512,25 +512,24 @@ function App(){
 
     {/* Header */}
     <div style={{borderBottom:"0.5px solid rgba(60,60,67,0.12)",background:"rgba(249,249,249,0.9)",backdropFilter:"blur(20px)",zIndex:10}}>
-      <div style={{padding:"8px 16px 4px",display:"flex",alignItems:"center",gap:8}}>
-        <span style={{fontSize:20}}>🌳</span>
-        <span style={{fontSize:17,fontWeight:700}}>Mi Familia</span>
+      <div style={{padding:"8px 16px 2px",display:"flex",alignItems:"center",gap:6}}>
+        <span style={{fontSize:16,fontWeight:700}}>Mi Familia</span>
         <span style={{fontSize:12,color:"rgba(60,60,67,0.6)"}}>{members.length}</span>
       </div>
-      <div style={{display:"flex",gap:6,padding:"4px 16px 8px",overflowX:"auto",scrollbarWidth:"none",msOverflowStyle:"none"}}>
-        <style>{".hscroll::-webkit-scrollbar{display:none}"}</style>
+      <div style={{display:"flex",gap:6,padding:"4px 16px 8px",overflowX:"auto",scrollbarWidth:"none",msOverflowStyle:"none",WebkitOverflowScrolling:"touch"}}>
+        <style>{"._hbar::-webkit-scrollbar{display:none}"}</style>
         {[
           {label:"+",onClick:()=>setZoom(z=>Math.min(z+0.15,2.5)),bg:"rgba(120,120,128,0.12)"},
           {label:"−",onClick:()=>setZoom(z=>Math.max(z-0.15,0.2)),bg:"rgba(120,120,128,0.12)"},
           {label:"Ajustar",onClick:fit,bg:"rgba(120,120,128,0.12)"},
           {label:"Guardar",onClick:manualSave,bg:"#34C759",color:"#fff"},
-          {label:"+ Agregar",onClick:openAdd,bg:"#007AFF",color:"#fff"},
+          {label:"Agregar",onClick:openAdd,bg:"#007AFF",color:"#fff"},
           ...(sel?[
             {label:"Editar",onClick:openEdit,bg:"#007AFF",color:"#fff"},
             {label:"Eliminar",onClick:removePerson,bg:"#FF3B30",color:"#fff"},
           ]:[]),
         ].map(({label,onClick,bg,color})=>(
-          <button key={label} onClick={onClick} style={{flexShrink:0,padding:"6px 12px",borderRadius:100,border:"none",background:bg,color:color||"inherit",fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
+          <button key={label} onClick={onClick} style={{flexShrink:0,padding:"5px 10px",borderRadius:100,border:"none",background:bg,color:color||"inherit",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
         ))}
       </div>
     </div>
