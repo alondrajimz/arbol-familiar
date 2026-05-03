@@ -127,13 +127,11 @@ function autoLayout(members){
     });
     Object.values(famMap).forEach(fam=>fam.sort((a,b)=>(a.birthDate||"").localeCompare(b.birthDate||"")));
 
-    // B+C) Build ordered list of "blocks" (couple or single) across all families
-    // Families with parents are sorted by their parents' already-placed X
+    // Sort families by earliest birthDate in the family (applies to all generations)
     const famKeys=Object.keys(famMap).sort((ka,kb)=>{
-      const ax=famMap[ka][0];const bx=famMap[kb][0];
-      const aParentX=Math.min(...[ax.parent1Id,ax.parent2Id].filter(Boolean).map(id=>posX[id]??Infinity));
-      const bParentX=Math.min(...[bx.parent1Id,bx.parent2Id].filter(Boolean).map(id=>posX[id]??Infinity));
-      return aParentX-bParentX;
+      const aDate=famMap[ka].map(x=>x.birthDate||"9999").sort()[0];
+      const bDate=famMap[kb].map(x=>x.birthDate||"9999").sort()[0];
+      return aDate.localeCompare(bDate);
     });
 
     // For each family, build couple/single units
