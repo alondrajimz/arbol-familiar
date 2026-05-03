@@ -427,21 +427,37 @@ function App(){
 
   // Open panels
   const tapCard=id=>{setSel(id);setPanel("view");};
-  const openAdd=()=>{setForm({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",residence:"",phone:"",email:"",facebook:"",instagram:"",parent1Id:"",parent2Id:"",photo:null});setPanel("add");};
-  const openEdit=()=>{if(!selM)return;setForm({...selM});setPanel("edit");};
+  const openAdd=()=>{setForm({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",residence:"",phone:"",email:"",facebook:"",instagram:"",parent1Id:"",parent2Id:"",partnerIdNew:"",photo:null});setPanel("add");};
+  const openEdit=()=>{if(!selM)return;setForm({...selM,partnerIdNew:""});setPanel("edit");};
   const openPartners=()=>{if(!selM)return;setPForm({partnerId:"",type:"actual"});setPanel("partners");};
 
   const saveForm=()=>{
     if(!form.firstName?.trim())return;
     if(panel==="add"&&members.length>0){
-      const hasConn=form.parent1Id||form.parent2Id||parsePartners(form.partnerships).length>0;
+      const hasConn=form.parent1Id||form.parent2Id||form.partnerIdNew||parsePartners(form.partnerships).length>0;
       if(!hasConn){alert("Conecta a esta persona con alguien del árbol: agrega un padre/madre o una pareja.");return;}
     }
     if(panel==="add"){
-      const n={...form,id:genId(),partnerships:[]};
-      update(p=>[...p,n]);
+      const newId=genId();
+      const ps=form.partnerIdNew?[{partnerId:form.partnerIdNew,type:"actual"}]:[];
+      const n={...form,id:newId,partnerships:ps};
+      update(p=>{
+        const next=[...p,n];
+        if(!form.partnerIdNew)return next;
+        return next.map(m=>m.id===form.partnerIdNew&&!m.partnerships.find(x=>x.partnerId===newId)?{...m,partnerships:[...m.partnerships,{partnerId:newId,type:"actual"}]}:m);
+      });
     } else {
-      update(p=>p.map(m=>m.id===sel?{...m,...form}:m));
+      update(p=>p.map(m=>{
+        if(m.id===sel){
+          const updated={...m,...form};
+          if(form.partnerIdNew&&!updated.partnerships.find(x=>x.partnerId===form.partnerIdNew))
+            updated.partnerships=[...updated.partnerships,{partnerId:form.partnerIdNew,type:"actual"}];
+          return updated;
+        }
+        if(form.partnerIdNew&&m.id===form.partnerIdNew&&!m.partnerships.find(x=>x.partnerId===sel))
+          return{...m,partnerships:[...m.partnerships,{partnerId:sel,type:"actual"}]};
+        return m;
+      }));
     }
     setPanel(null);
   };
@@ -600,6 +616,11 @@ function App(){
       <Sel value={form.parent2Id} onChange={e=>setForm({...form,parent2Id:e.target.value})}>
         <option value="">Padre/Madre 2 — Ninguno</option>
         {members.filter(m=>m.id!==sel&&m.id!==form.parent1Id&&(!form.birthDate||!m.birthDate||m.birthDate<form.birthDate||m.deceased)).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
+      </Sel>
+      <SecTitle>Pareja</SecTitle>
+      <Sel value={form.partnerIdNew||""} onChange={e=>setForm({...form,partnerIdNew:e.target.value})}>
+        <option value="">— Ninguno —</option>
+        {members.filter(m=>m.id!==sel&&!parsePartners(m.partnerships).find(x=>x.partnerId===sel)).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
       </Sel>
       <button onClick={saveForm} style={{width:"100%",marginTop:16,padding:"14px 0",background:"#007AFF",border:"none",borderRadius:12,color:"#fff",fontSize:17,fontWeight:600,cursor:"pointer"}}>
         {panel==="add"?"Agregar":"Guardar cambios"}
