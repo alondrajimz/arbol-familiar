@@ -141,7 +141,7 @@ function autoLayout(members){
       const done=new Set();const units=[];
       fam.forEach(x=>{
         if(done.has(x.id))return;done.add(x.id);
-        const pr=parsePartners(x.partnerships).find(p=>byId[p.partnerId]&&gen[p.partnerId]===g&&!done.has(p.partnerId));
+        const pr=parsePartners(x.partnerships).sort((a,b)=>(a.type==="actual"?0:1)-(b.type==="actual"?0:1)).find(p=>byId[p.partnerId]&&gen[p.partnerId]===g&&!done.has(p.partnerId));
         if(pr){
           const pm=byId[pr.partnerId];done.add(pm.id);
           const mLeft=x.gender==="M"||(x.gender!=="F"&&pm.gender==="F");
@@ -184,11 +184,7 @@ function autoLayout(members){
       allUnits.forEach(u=>{
         // Ideal X = midpoint of this unit's own direct children
         const childXs=[];
-        if(u.couple){
-          m.filter(c=>{const p=[c.parent1Id,c.parent2Id];return p.includes(u.ids[0])&&p.includes(u.ids[1]);}).forEach(c=>{if(posX[c.id]!=null)childXs.push(posX[c.id]);});
-        } else {
-          directKids(u.ids[0]).forEach(c=>{if(posX[c.id]!=null)childXs.push(posX[c.id]);});
-        }
+        u.ids.forEach(id=>directKids(id).forEach(c=>{if(posX[c.id]!=null&&!childXs.includes(posX[c.id]))childXs.push(posX[c.id]);}));
         const ideal=childXs.length?(Math.min(...childXs)+Math.max(...childXs))/2:null;
 
         if(u.couple){
