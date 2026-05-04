@@ -211,6 +211,11 @@ function autoLayout(members){
   }
 
   m.forEach(x=>{x.x=posX[x.id]??80;x.y=(gen[x.id]??0)*220+100;});
+  // Guarantee partners always share exact same Y
+  m.forEach(x=>parsePartners(x.partnerships).forEach(pr=>{
+    const pm=byId[pr.partnerId];if(!pm)return;
+    if(x.y!==pm.y){const y=Math.min(x.y,pm.y);x.y=y;pm.y=y;}
+  }));
   return m;
   }catch(e){console.error("autoLayout error:",e);return members.map((p,i)=>({...p,x:100+i*160,y:100}));}
 }
@@ -268,23 +273,23 @@ function TreeLines({members}){
   const byId=Object.fromEntries(members.map(m=>[m.id,m]));
   const drawn=new Set();
 
-  // Couple lines (horizontal)
+  // Couple lines: right edge of left avatar → left edge of right avatar
+  // at avatar center Y (avatarTop=-51 + radius=35 → node.y-16)
   members.forEach(m=>{
     parsePartners(m.partnerships).forEach(pr=>{
       const key=[m.id,pr.partnerId].sort().join("-");
       if(drawn.has(key))return;drawn.add(key);
       const sp=byId[pr.partnerId];if(!sp)return;
-      if(Math.abs(m.y-sp.y)>10)return; // not same row
+      if(Math.abs(m.y-sp.y)>10)return;
       const x1=Math.min(m.x,sp.x)+35,x2=Math.max(m.x,sp.x)-35;
-      const y=m.y;
+      const y=(m.y+sp.y)/2-16;
       lines.push(<line key={`couple-${key}`} x1={x1} y1={y} x2={x2} y2={y}
         stroke={pr.type==="anterior"?"#ccc":"#bbb"} strokeWidth={2}
         strokeDasharray={pr.type==="anterior"?"5 4":"none"}/>);
     });
   });
 
-  // Parent-child lines (straight H+V)
-  // Group children by parent pair
+  // Parent-child lines grouped by parent pair
   const familyGroups={};
   members.forEach(c=>{
     if(!c.parent1Id&&!c.parent2Id)return;
@@ -298,20 +303,15 @@ function TreeLines({members}){
     const children=fam.children;
     if(!parents.length||!children.length)return;
 
-    // Parent anchor point: center between parents (or single parent)
     const parentCenterX=parents.reduce((s,p)=>s+p.x,0)/parents.length;
-    const parentY=parents[0].y+55; // bottom of parent card
-
-    // Child top Y
-    const childY=children[0].y-55;
+    const parentY=parents[0].y+19; // bottom of parent avatar circle
+    const childY=children[0].y-51; // top of child avatar circle
     const midY=(parentY+childY)/2;
 
-    // Vertical line from parents down to mid
     lines.push(<line key={`pv-${fam.parents.join("-")}`}
       x1={parentCenterX} y1={parentY} x2={parentCenterX} y2={midY}
       stroke="#bbb" strokeWidth={2}/>);
 
-    // Horizontal bar at midY spanning all children
     const childXs=children.map(c=>c.x).sort((a,b)=>a-b);
     const barLeft=Math.min(parentCenterX,childXs[0]);
     const barRight=Math.max(parentCenterX,childXs[childXs.length-1]);
@@ -322,7 +322,6 @@ function TreeLines({members}){
         stroke="#bbb" strokeWidth={2}/>);
     }
 
-    // Vertical lines from bar down to each child
     children.forEach(c=>{
       lines.push(<line key={`cv-${c.id}`}
         x1={c.x} y1={midY} x2={c.x} y2={childY}
@@ -574,15 +573,36 @@ function App(){
         {selM.residence&&<div style={{padding:"10px 14px",borderBottom:"0.5px solid rgba(60,60,67,0.12)"}}><span style={{color:"#888",fontSize:12}}>Residencia</span><div>{selM.residence}</div></div>}
         {selM.deceased&&<div style={{padding:"10px 14px"}}><span style={{color:"#888",fontSize:12}}>Fallecimiento</span><div>{selM.deathDate||""}{selM.deathPlace?` · Restos: ${selM.deathPlace}`:""}</div></div>}
       </div>
+      {parsePartners(selM.partnerships).filter(pr=>members.find(m=>m.id===pr.partnerId)).length>0&&
+        <div style={{background:"#fff",borderRadius:12,overflow:"hidden"}}>
+          {parsePartners(selM.partnerships).map((pr,i,arr)=>{
+            const p=members.find(m=>m.id===pr.partnerId);if(!p)return null;
+            return <div key={pr.partnerId} style={{padding:"10px 14px",display:"flex",alignItems:"center",gap:10,borderBottom:i<arr.length-1?"0.5px solid rgba(60,60,67,0.12)":"none"}}>
+              <Avatar photo={p.photo} name={getDisplay(p).full} size={40} gender={p.gender}/>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:600,fontSize:15}}>{getDisplay(p).full}</div>
+                <div style={{fontSize:12,color:pr.type==="actual"?"#34C759":"#888"}}>{pr.type==="actual"?"Pareja actual":"Ex pareja"}</div>
+              </div>
+            </div>;
+          })}
+        </div>
+      }
       {(selM.phone||selM.email||selM.facebook||selM.instagram)&&<div style={{display:"flex",justifyContent:"center",gap:12,padding:8}}>
-        {selM.phone&&<a href={`tel:${selM.phone}`} style={{width:44,height:44,borderRadius:22,background:"#34C759",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontSize:20}}>📞</span></a>}
-        {selM.email&&<a href={`mailto:${selM.email}`} style={{width:44,height:44,borderRadius:22,background:"#007AFF",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontSize:20}}>✉️</span></a>}
-        {selM.facebook&&<a href={selM.facebook.startsWith("http")?selM.facebook:`https://facebook.com/${selM.facebook}`} target="_blank" style={{width:44,height:44,borderRadius:22,background:"#1877F2",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontSize:16,fontWeight:800}}>f</span></a>}
-        {selM.instagram&&<a href={selM.instagram.startsWith("http")?selM.instagram:`https://instagram.com/${selM.instagram}`} target="_blank" style={{width:44,height:44,borderRadius:22,background:"linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontSize:16,fontWeight:700}}>ig</span></a>}
+        {selM.phone&&<a href={`tel:${selM.phone}`} style={{width:44,height:44,borderRadius:22,background:"#34C759",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.07 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3 2.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        </a>}
+        {selM.email&&<a href={`mailto:${selM.email}`} style={{width:44,height:44,borderRadius:22,background:"#007AFF",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        </a>}
+        {selM.facebook&&<a href={selM.facebook.startsWith("http")?selM.facebook:`https://facebook.com/${selM.facebook}`} target="_blank" style={{width:44,height:44,borderRadius:22,background:"#1877F2",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M24 12.073C24 5.404 18.627 0 12 0S0 5.404 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.235 2.686.235v2.97h-1.514c-1.491 0-1.956.93-1.956 1.886v2.268h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/></svg>
+        </a>}
+        {selM.instagram&&<a href={selM.instagram.startsWith("http")?selM.instagram:`https://instagram.com/${selM.instagram}`} target="_blank" style={{width:44,height:44,borderRadius:22,background:"linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
+        </a>}
       </div>}
       <div style={{display:"flex",gap:8,padding:"8px 0"}}>
         <button onClick={openEdit} style={{flex:1,padding:"12px 0",background:"#007AFF",border:"none",borderRadius:12,color:"#fff",fontSize:16,fontWeight:600,cursor:"pointer"}}>Editar</button>
-        <button onClick={openPartners} style={{flex:1,padding:"12px 0",background:"#34C759",border:"none",borderRadius:12,color:"#fff",fontSize:16,fontWeight:600,cursor:"pointer"}}>Parejas</button>
         <button onClick={removePerson} style={{padding:"12px 16px",background:"#FF3B30",border:"none",borderRadius:12,color:"#fff",fontSize:16,fontWeight:600,cursor:"pointer"}}>Eliminar</button>
       </div>
     </div>)}
