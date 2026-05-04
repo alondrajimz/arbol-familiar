@@ -573,6 +573,7 @@ function App(){
         {selM.residence&&<div style={{padding:"10px 14px",borderBottom:"0.5px solid rgba(60,60,67,0.12)"}}><span style={{color:"#888",fontSize:12}}>Residencia</span><div>{selM.residence}</div></div>}
         {selM.deceased&&<div style={{padding:"10px 14px"}}><span style={{color:"#888",fontSize:12}}>Fallecimiento</span><div>{selM.deathDate||""}{selM.deathPlace?` · Restos: ${selM.deathPlace}`:""}</div></div>}
       </div>
+      {(()=>{const pars=[selM.parent1Id,selM.parent2Id].filter(Boolean).map(id=>members.find(m=>m.id===id)).filter(Boolean);return pars.length>0&&<div style={{background:"#fff",borderRadius:12,overflow:"hidden"}}>{pars.map((p,i)=><div key={p.id} style={{padding:"10px 14px",display:"flex",alignItems:"center",gap:10,borderBottom:i<pars.length-1?"0.5px solid rgba(60,60,67,0.12)":"none"}}><Avatar photo={p.photo} name={getDisplay(p).full} size={40} gender={p.gender}/><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15}}>{getDisplay(p).full}</div><div style={{fontSize:12,color:"#888"}}>{p.gender==="F"?"Madre":"Padre"}</div></div></div>)}</div>;})()}
       {parsePartners(selM.partnerships).filter(pr=>members.find(m=>m.id===pr.partnerId)).length>0&&
         <div style={{background:"#fff",borderRadius:12,overflow:"hidden"}}>
           {parsePartners(selM.partnerships).map((pr,i,arr)=>{
