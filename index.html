@@ -75,14 +75,15 @@ function autoLayout(members){
 
   // Steps 2-4 in one outer loop until stable (max 100 passes)
   chg=true;it=0;
+  const coupleForced=new Set();
   while(chg&&it++<100){
     chg=false;
     // Partners → same gen (min of the two = higher in tree)
     m.forEach(x=>parsePartners(x.partnerships).forEach(pr=>{
       if(gen[pr.partnerId]==null)return;
       const g=Math.min(gen[x.id],gen[pr.partnerId]);
-      if(gen[x.id]!==g){gen[x.id]=g;chg=true;}
-      if(gen[pr.partnerId]!==g){gen[pr.partnerId]=g;chg=true;}
+      if(gen[x.id]!==g){gen[x.id]=g;chg=true;coupleForced.add(x.id);}
+      if(gen[pr.partnerId]!==g){gen[pr.partnerId]=g;chg=true;coupleForced.add(pr.partnerId);}
     }));
     // Siblings → same gen (max = deepest sibling's row, keeps all on one row)
     const sibs={};
@@ -95,8 +96,9 @@ function autoLayout(members){
       const targetG=Math.max(...parentGens);
       ids.forEach(id=>{if((gen[id]??0)!==targetG){gen[id]=targetG;chg=true;}});
     });
-    // Children strictly below every parent
+    // Children strictly below every parent (skipped if partner rule already placed them)
     m.forEach(x=>{
+      if(coupleForced.has(x.id))return;
       const gs=[x.parent1Id,x.parent2Id].filter(Boolean).map(id=>gen[id]).filter(g=>g!=null);
       if(!gs.length)return;
       const n=Math.max(...gs)+1;
