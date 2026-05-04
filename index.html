@@ -106,9 +106,9 @@ function autoLayout(members){
     });
   }
 
-  const CG=100; // couple center-to-center (70px avatar + 30px gap)
-  const MG=160; // gap between members of same family
-  const FG=220; // gap between different families
+  const CG=130; // couple center-to-center (70px avatar + 60px gap)
+  const MG=185; // min gap between node centers (card is 150px wide → 35px margin)
+  const FG=260; // gap between different families
   const maxG=Math.max(...Object.values(gen),0);
   const posX={};
 
@@ -254,14 +254,15 @@ function Avatar({photo,name,size=70,gender,deceased}){
 function PersonNode({m,onTap}){
   const d=getDisplay(m);
   const age=calcAge(m.birthDate,m.deceased?m.deathDate:null);
+  const txt={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 4px"};
   return (
     <foreignObject x={m.x-75} y={m.y-55} width={150} height={130}>
-      <div onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0"}}>
+      <div onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden"}}>
         <Avatar photo={m.photo} name={d.full} size={70} gender={m.gender} deceased={m.deceased}/>
-        <div style={{marginTop:4,fontSize:14,fontWeight:700,color:m.deceased?"#888":"#000"}}>
+        <div style={{marginTop:4,fontSize:14,fontWeight:700,color:m.deceased?"#888":"#000",...txt}}>
           {m.deceased?"† ":""}{d.first}
         </div>
-        {d.last&&<div style={{fontSize:11,color:"#666"}}>{d.last}</div>}
+        {d.last&&<div style={{fontSize:11,color:"#666",...txt}}>{d.last}</div>}
         {age!==null&&<div style={{fontSize:11,color:"#999"}}>{age} años</div>}
       </div>
     </foreignObject>
