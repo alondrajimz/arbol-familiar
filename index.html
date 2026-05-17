@@ -11,6 +11,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 <script>
 firebase.initializeApp({
   apiKey:"AIzaSyBW0CvCK4bS4BOwApcGyPXqcDRrvFm7w7Y",
@@ -22,6 +23,7 @@ firebase.initializeApp({
   appId:"1:671444673579:web:78f637bb24adce2b28b66e"
 });
 const dbRef=firebase.database().ref("familyTree");
+const storage=firebase.storage();
 </script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -221,16 +223,20 @@ function autoLayout(members){
 }
 
 /* ── Firebase helpers ── */
-function savePhotos(members){
-  const photos={};
-  members.forEach(m=>{if(m.photo)photos[m.id]=m.photo;});
-  try{localStorage.setItem("family-photos",JSON.stringify(photos));}catch(e){}
-}
-function loadPhotos(){
-  try{return JSON.parse(localStorage.getItem("family-photos")||"{}");}catch(e){return{};}
+async function uploadPhoto(memberId,base64){
+  const res=await fetch(base64);
+  const blob=await res.blob();
+  const ref=storage.ref(`photos/${memberId}.jpg`);
+  await ref.put(blob,{contentType:"image/jpeg"});
+  return ref.getDownloadURL();
 }
 function stripPhotos(members){
-  return members.map(m=>{const c={...m};delete c.photo;return c;});
+  // keep URL photos in DB; only strip base64 (large, shouldn't be in DB)
+  return members.map(m=>{
+    const c={...m};
+    if(c.photo&&c.photo.startsWith("data:"))delete c.photo;
+    return c;
+  });
 }
 function saveToDB(members){
   const data={};
@@ -397,11 +403,10 @@ function App(){
       if(isLocal.current){isLocal.current=false;return;}
       const val=snap.val();
       if(!val){setLoading(false);return;}
-      const photos=loadPhotos();
       const arr=Object.entries(val).map(([k,v])=>({
         ...v,id:v.id||k,
         partnerships:parsePartners(v.partnerships),
-        photo:photos[v.id||k]||null
+        photo:v.photo||null
       }));
       setMembers(autoLayout(arr));
       setLoading(false);
@@ -411,7 +416,6 @@ function App(){
 
   // Auto save
   const doSave=useCallback((data)=>{
-    savePhotos(data);
     isLocal.current=true;
     saveToDB(data).then(()=>flash("Guardado ✓")).catch(()=>flash("Error al guardar"));
   },[]);
@@ -433,30 +437,35 @@ function App(){
   const openEdit=()=>{if(!selM)return;setForm({...selM,partnerIdNew:""});setPanel("edit");};
   const openPartners=()=>{if(!selM)return;setPForm({partnerId:"",type:"actual"});setPanel("partners");};
 
-  const saveForm=()=>{
+  const saveForm=async()=>{
     if(!form.firstName?.trim())return;
     if(panel==="add"&&members.length>0){
       const hasConn=form.parent1Id||form.parent2Id||form.partnerIdNew||parsePartners(form.partnerships).length>0;
       if(!hasConn){alert("Conecta a esta persona con alguien del árbol: agrega un padre/madre o una pareja.");return;}
     }
+    let photo=form.photo;
+    const targetId=panel==="add"?genId():sel;
+    if(photo&&photo.startsWith("data:")){
+      try{photo=await uploadPhoto(targetId,photo);}catch(e){console.error("upload error",e);}
+    }
+    const fdata={...form,photo};
     if(panel==="add"){
-      const newId=genId();
-      const ps=form.partnerIdNew?[{partnerId:form.partnerIdNew,type:"actual"}]:[];
-      const n={...form,id:newId,partnerships:ps};
+      const ps=fdata.partnerIdNew?[{partnerId:fdata.partnerIdNew,type:"actual"}]:[];
+      const n={...fdata,id:targetId,partnerships:ps};
       update(p=>{
         const next=[...p,n];
-        if(!form.partnerIdNew)return next;
-        return next.map(m=>m.id===form.partnerIdNew&&!m.partnerships.find(x=>x.partnerId===newId)?{...m,partnerships:[...m.partnerships,{partnerId:newId,type:"actual"}]}:m);
+        if(!fdata.partnerIdNew)return next;
+        return next.map(m=>m.id===fdata.partnerIdNew&&!m.partnerships.find(x=>x.partnerId===targetId)?{...m,partnerships:[...m.partnerships,{partnerId:targetId,type:"actual"}]}:m);
       });
     } else {
       update(p=>p.map(m=>{
         if(m.id===sel){
-          const updated={...m,...form};
-          if(form.partnerIdNew&&!updated.partnerships.find(x=>x.partnerId===form.partnerIdNew))
-            updated.partnerships=[...updated.partnerships,{partnerId:form.partnerIdNew,type:"actual"}];
+          const updated={...m,...fdata};
+          if(fdata.partnerIdNew&&!updated.partnerships.find(x=>x.partnerId===fdata.partnerIdNew))
+            updated.partnerships=[...updated.partnerships,{partnerId:fdata.partnerIdNew,type:"actual"}];
           return updated;
         }
-        if(form.partnerIdNew&&m.id===form.partnerIdNew&&!m.partnerships.find(x=>x.partnerId===sel))
+        if(fdata.partnerIdNew&&m.id===fdata.partnerIdNew&&!m.partnerships.find(x=>x.partnerId===sel))
           return{...m,partnerships:[...m.partnerships,{partnerId:sel,type:"actual"}]};
         return m;
       }));
@@ -494,7 +503,7 @@ function App(){
   };
 
   const manualSave=()=>{
-    savePhotos(members);isLocal.current=true;
+    isLocal.current=true;
     saveToDB(members).then(()=>flash("Guardado ✓")).catch(()=>flash("Error"));
   };
 
