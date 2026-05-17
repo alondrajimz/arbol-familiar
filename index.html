@@ -74,6 +74,7 @@ function autoLayout(members){
     if(gs.length){gen[x.id]=Math.max(...gs)+1;chg=true;}
   });}
   m.forEach(x=>{if(gen[x.id]==null)gen[x.id]=0;});
+  console.log("GENS:", Object.entries(gen).map(([id,g])=>{const m=members.find(x=>x.id===id);return (m?.firstName||id)+":gen"+g}).join(", "));
 
   // Steps 2-4 in one outer loop until stable (max 100 passes)
   chg=true;it=0;
