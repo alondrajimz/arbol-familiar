@@ -533,13 +533,23 @@ function App(){
       }));
     }
     // Link children: set parent1Id or parent2Id on each selected child
-    if(fdata.hijos&&fdata.hijos.length){
-      fdata.hijos.forEach(hijoId=>{
+    const newHijos=fdata.hijos||[];
+    newHijos.forEach(hijoId=>{
+      const hijo=members.find(m=>m.id===hijoId);if(!hijo)return;
+      if(!hijo.parent1Id||hijo.parent1Id===targetId)
+        dbRef.child(hijoId).update({parent1Id:targetId});
+      else if(!hijo.parent2Id||hijo.parent2Id===targetId)
+        dbRef.child(hijoId).update({parent2Id:targetId});
+    });
+    // Clear parentId for children removed from the list
+    if(panel==="edit"){
+      const prevHijos=members.filter(m=>m.parent1Id===targetId||m.parent2Id===targetId).map(m=>m.id);
+      prevHijos.filter(id=>!newHijos.includes(id)).forEach(hijoId=>{
         const hijo=members.find(m=>m.id===hijoId);if(!hijo)return;
-        if(!hijo.parent1Id||hijo.parent1Id===targetId)
-          dbRef.child(hijoId).update({parent1Id:targetId});
-        else if(!hijo.parent2Id||hijo.parent2Id===targetId)
-          dbRef.child(hijoId).update({parent2Id:targetId});
+        const upd={};
+        if(hijo.parent1Id===targetId)upd.parent1Id=null;
+        if(hijo.parent2Id===targetId)upd.parent2Id=null;
+        if(Object.keys(upd).length)dbRef.child(hijoId).update(upd);
       });
     }
     setPanel(null);
