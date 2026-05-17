@@ -232,6 +232,15 @@ function autoLayout(members, rootId){
     const pm=byId[pr.partnerId];if(!pm)return;
     if(x.y!==pm.y){const y=Math.min(x.y,pm.y);x.y=y;pm.y=y;}
   }));
+  // Tag inCoreTree: BFS up ancestors + BFS down descendants from rootId
+  if(rootId&&byId[rootId]){
+    const core=new Set([rootId]);
+    const aq=[rootId];
+    while(aq.length){const id=aq.shift();const nd=byId[id];if(!nd)continue;[nd.parent1Id,nd.parent2Id].filter(Boolean).forEach(pid=>{if(!core.has(pid)){core.add(pid);aq.push(pid);}});}
+    const dq=[rootId];
+    while(dq.length){const id=dq.shift();m.filter(x=>x.parent1Id===id||x.parent2Id===id).forEach(c=>{if(!core.has(c.id)){core.add(c.id);dq.push(c.id);}});}
+    m.forEach(x=>{x.inCoreTree=core.has(x.id);});
+  }
   return m;
   }catch(e){console.error("autoLayout error:",e);return members.map((p,i)=>({...p,x:100+i*160,y:100}));}
 }
@@ -278,7 +287,7 @@ function PersonNode({m,onTap,relation}){
   const d=getDisplay(m);
   const age=calcAge(m.birthDate,m.deceased?m.deathDate:null);
   const txt={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 4px"};
-  const opacity=relation==="medium"?0.5:relation==="distant"?0.25:1;
+  const opacity=relation==="medium"?0.6:relation==="distant"?0.2:1;
   return (
     <foreignObject x={m.x-75} y={m.y-55} width={150} height={130} opacity={opacity}>
       <div onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden"}}>
@@ -406,6 +415,7 @@ function getRelation(memberId,rootId,members){
   if(memberId===rootId)return"self";
   const byId=Object.fromEntries(members.map(m=>[m.id,m]));
   const root=byId[rootId];if(!root)return"distant";
+  // "close": partners, parents, children, siblings — shown fully regardless of core tree
   const partners=parsePartners(root.partnerships).map(p=>p.partnerId);
   if(partners.includes(memberId))return"close";
   const parents=[root.parent1Id,root.parent2Id].filter(Boolean);
@@ -416,18 +426,22 @@ function getRelation(memberId,rootId,members){
     const sibs=members.filter(m=>m.id!==rootId&&parents.some(p=>m.parent1Id===p||m.parent2Id===p)).map(m=>m.id);
     if(sibs.includes(memberId))return"close";
   }
+  // "medium" only if member is part of root's direct ancestor/descendant tree (inCoreTree)
+  // inCoreTree is set by autoLayout; undefined means not yet computed → treat as in-tree
+  const mo=byId[memberId];
+  const inCore=!mo||mo.inCoreTree!==false;
   const gps=parents.flatMap(pid=>{const p=byId[pid];return p?[p.parent1Id,p.parent2Id].filter(Boolean):[];});
-  if(gps.includes(memberId))return"medium";
+  if(gps.includes(memberId))return inCore?"medium":"distant";
   const gcs=children.flatMap(cid=>members.filter(m=>m.parent1Id===cid||m.parent2Id===cid).map(m=>m.id));
-  if(gcs.includes(memberId))return"medium";
+  if(gcs.includes(memberId))return inCore?"medium":"distant";
   const parentsPartners=parents.flatMap(pid=>{const p=byId[pid];return p?parsePartners(p.partnerships).map(x=>x.partnerId).filter(id=>id!==rootId):[];});
-  if(parentsPartners.includes(memberId))return"medium";
+  if(parentsPartners.includes(memberId))return inCore?"medium":"distant";
   const childPartners=children.flatMap(cid=>{const c=byId[cid];return c?parsePartners(c.partnerships).map(x=>x.partnerId):[];});
-  if(childPartners.includes(memberId))return"medium";
+  if(childPartners.includes(memberId))return inCore?"medium":"distant";
   if(parents.length){
     const sibs=members.filter(m=>m.id!==rootId&&parents.some(p=>m.parent1Id===p||m.parent2Id===p));
     const sibPartners=sibs.flatMap(s=>parsePartners(s.partnerships).map(x=>x.partnerId));
-    if(sibPartners.includes(memberId))return"medium";
+    if(sibPartners.includes(memberId))return inCore?"medium":"distant";
   }
   return"distant";
 }
