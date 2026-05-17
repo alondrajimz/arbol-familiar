@@ -656,7 +656,11 @@ function App(){
       <SecTitle>Pareja</SecTitle>
       <Sel value={form.partnerIdNew||""} onChange={e=>setForm({...form,partnerIdNew:e.target.value})}>
         <option value="">— Ninguno —</option>
-        {members.filter(m=>m.id!==sel&&!parsePartners(m.partnerships).find(x=>x.partnerId===sel)).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
+        {members.filter(m=>{
+          if(m.id===sel)return false;
+          const actual=parsePartners(m.partnerships).find(x=>x.type==="actual");
+          return !actual||actual.partnerId===sel;
+        }).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
       </Sel>
       <button onClick={saveForm} style={{width:"100%",marginTop:16,padding:"14px 0",background:"#007AFF",border:"none",borderRadius:12,color:"#fff",fontSize:17,fontWeight:600,cursor:"pointer"}}>
         {panel==="add"?"Agregar":"Guardar cambios"}
