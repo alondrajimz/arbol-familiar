@@ -11,7 +11,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 <script>
 firebase.initializeApp({
   apiKey:"AIzaSyBW0CvCK4bS4BOwApcGyPXqcDRrvFm7w7Y",
@@ -23,7 +22,6 @@ firebase.initializeApp({
   appId:"1:671444673579:web:78f637bb24adce2b28b66e"
 });
 const dbRef=firebase.database().ref("familyTree");
-const storage=firebase.storage();
 </script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -226,11 +224,14 @@ function autoLayout(members){
 
 /* ── Firebase helpers ── */
 async function uploadPhoto(memberId,base64){
-  const res=await fetch(base64);
-  const blob=await res.blob();
-  const ref=storage.ref(`photos/${memberId}.jpg`);
-  await ref.put(blob,{contentType:"image/jpeg"});
-  return ref.getDownloadURL();
+  const blob=await fetch(base64).then(r=>r.blob());
+  const fd=new FormData();
+  fd.append("file",blob);
+  fd.append("upload_preset","vsku3vni");
+  fd.append("public_id","family/"+memberId);
+  const res=await fetch("https://api.cloudinary.com/v1_1/dm0fstth3/image/upload",{method:"POST",body:fd});
+  const data=await res.json();
+  return data.secure_url;
 }
 function stripPhotos(members){
   // keep URL photos in DB; only strip base64 (large, shouldn't be in DB)
