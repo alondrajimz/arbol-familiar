@@ -495,7 +495,7 @@ function App(){
   const saveForm=async()=>{
     if(!form.firstName?.trim())return;
     if(panel==="add"&&members.length>0){
-      const hasConn=form.parent1Id||form.parent2Id||form.partnerIdNew||parsePartners(form.partnerships).length>0;
+      const hasConn=form.parent1Id||form.parent2Id||form.partnerIdNew||parsePartners(form.partnerships).length>0||(form.hijos||[]).length>0;
       if(!hasConn){alert("Conecta a esta persona con alguien del árbol: agrega un padre/madre o una pareja.");return;}
     }
     let photo=form.photo;
