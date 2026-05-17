@@ -74,18 +74,18 @@ function autoLayout(members){
     if(gs.length){gen[x.id]=Math.max(...gs)+1;chg=true;}
   });}
   m.forEach(x=>{if(gen[x.id]==null)gen[x.id]=0;});
-  console.log("GENS:", Object.entries(gen).map(([id,g])=>{const m=members.find(x=>x.id===id);return (m?.firstName||id)+":gen"+g}).join(", "));
 
   // Steps 2-4 in one outer loop until stable (max 100 passes)
   chg=true;it=0;
   const coupleForced=new Set();
   while(chg&&it++<100){
     chg=false;
-    // Partners → same gen (min of the two = higher in tree)
+    // Partners → same gen (priority: if one has parents, other adopts that gen)
     m.forEach(x=>parsePartners(x.partnerships).forEach(pr=>{
       if(gen[pr.partnerId]==null)return;
-      const g=Math.min(gen[x.id],gen[pr.partnerId]);
-      console.log("COUPLE CHECK:", x.firstName, gen[x.id], "->", g, "partner:", byId[pr.partnerId]?.firstName, gen[pr.partnerId]);
+      const xP=!!(x.parent1Id||x.parent2Id);
+      const pP=!!(byId[pr.partnerId]?.parent1Id||byId[pr.partnerId]?.parent2Id);
+      const g=(!xP&&pP)?gen[pr.partnerId]:(xP&&!pP)?gen[x.id]:Math.min(gen[x.id],gen[pr.partnerId]);
       if(gen[x.id]!==g){gen[x.id]=g;chg=true;coupleForced.add(x.id);}
       if(gen[pr.partnerId]!==g){gen[pr.partnerId]=g;chg=true;coupleForced.add(pr.partnerId);}
     }));
