@@ -56,7 +56,7 @@ function getDisplay(m){
 function parsePartners(p){if(!p)return[];if(Array.isArray(p))return p;return Object.values(p);}
 
 /* ── LAYOUT ALGORITHM ── */
-function autoLayout(members){
+function autoLayout(members, rootId){
   try{
   if(!members.length)return members;
   const m=members.map(x=>({...x}));
@@ -204,11 +204,15 @@ function autoLayout(members){
     }
   }
 
-  // E) Center everything horizontally
+  // E) Center everything horizontally (around root person if set)
   const allXs=Object.values(posX);
   if(allXs.length){
-    const mid=(Math.min(...allXs)+Math.max(...allXs))/2;
-    const shift=80-Math.min(...allXs);
+    if(rootId&&posX[rootId]!=null){
+      const mid=(Math.min(...allXs)+Math.max(...allXs))/2;
+      const s=mid-posX[rootId];
+      Object.keys(posX).forEach(id=>{posX[id]+=s;});
+    }
+    const shift=80-Math.min(...Object.values(posX));
     Object.keys(posX).forEach(id=>{posX[id]+=shift;});
   }
 
@@ -395,6 +399,10 @@ function App(){
   const [toast,setToast]=useState(null);
   const [zoom,setZoom]=useState(1);
   const [loading,setLoading]=useState(true);
+  const [familyRoot,setFamilyRoot]=useState(()=>localStorage.getItem("familyRoot"));
+  const [showRootModal,setShowRootModal]=useState(()=>!localStorage.getItem("familyRoot"));
+  const [rootSelect,setRootSelect]=useState(()=>localStorage.getItem("familyRoot")||"");
+  const familyRootRef=useRef(localStorage.getItem("familyRoot"));
   const isLocal=useRef(false);
   const autoSaveTimer=useRef(null);
 
@@ -425,12 +433,20 @@ function App(){
 
   const update=useCallback(fn=>{
     setMembers(prev=>{
-      const next=autoLayout(typeof fn==="function"?fn(prev):fn);
+      const next=autoLayout(typeof fn==="function"?fn(prev):fn, familyRootRef.current);
       if(autoSaveTimer.current)clearTimeout(autoSaveTimer.current);
       autoSaveTimer.current=setTimeout(()=>doSave(next),2000);
       return next;
     });
   },[doSave]);
+
+  const saveRoot=id=>{
+    localStorage.setItem("familyRoot",id);
+    familyRootRef.current=id;
+    setFamilyRoot(id);
+    setShowRootModal(false);
+    setMembers(prev=>autoLayout(prev,id));
+  };
 
   const selM=members.find(m=>m.id===sel);
 
@@ -690,6 +706,22 @@ function App(){
       </Sel>
       <button onClick={addPartner} disabled={!pForm.partnerId} style={{width:"100%",padding:"12px 0",background:pForm.partnerId?"#007AFF":"rgba(120,120,128,0.12)",border:"none",borderRadius:12,color:pForm.partnerId?"#fff":"#999",fontSize:16,fontWeight:600,cursor:pForm.partnerId?"pointer":"default"}}>Agregar pareja</button>
     </div>)}
+
+    {/* Root person chip */}
+    {familyRoot&&(()=>{const rm=members.find(m=>m.id===familyRoot);if(!rm)return null;return <div onClick={()=>{setRootSelect(familyRoot);setShowRootModal(true);}} style={{position:"fixed",bottom:20,right:20,zIndex:50,background:"#fff",borderRadius:100,padding:"6px 12px 6px 6px",display:"flex",alignItems:"center",gap:8,boxShadow:"0 2px 12px rgba(0,0,0,0.18)",cursor:"pointer"}}><Avatar photo={rm.photo} name={getDisplay(rm).full} size={32} gender={rm.gender}/><span style={{fontSize:13,fontWeight:600}}>{getDisplay(rm).first}</span></div>;})()}
+
+    {/* Who are you modal */}
+    {showRootModal&&members.length>0&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:"#F2F2F7",borderRadius:20,padding:24,width:"min(340px,100%)",display:"flex",flexDirection:"column",gap:16}}>
+        <div style={{fontSize:20,fontWeight:700,textAlign:"center"}}>¿Quién eres?</div>
+        <Sel value={rootSelect} onChange={e=>setRootSelect(e.target.value)}>
+          <option value="">Selecciona tu nombre...</option>
+          {[...members].sort((a,b)=>getDisplay(a).full.localeCompare(getDisplay(b).full)).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
+        </Sel>
+        <button onClick={()=>{if(rootSelect)saveRoot(rootSelect);}} disabled={!rootSelect} style={{padding:"14px 0",background:rootSelect?"#007AFF":"rgba(120,120,128,0.12)",border:"none",borderRadius:12,color:rootSelect?"#fff":"#999",fontSize:17,fontWeight:600,cursor:rootSelect?"pointer":"default"}}>Continuar</button>
+        {familyRoot&&<button onClick={()=>setShowRootModal(false)} style={{padding:"10px 0",background:"none",border:"none",color:"#007AFF",fontSize:15,cursor:"pointer"}}>Cancelar</button>}
+      </div>
+    </div>}
   </div>;
 }
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
