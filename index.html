@@ -204,16 +204,19 @@ function autoLayout(members, rootId){
     }
   }
 
-  // E) Center everything horizontally (around root person if set)
+  // E) Center root person at window.innerWidth/2, fallback to minX=80
   const allXs=Object.values(posX);
   if(allXs.length){
     if(rootId&&posX[rootId]!=null){
-      const mid=(Math.min(...allXs)+Math.max(...allXs))/2;
-      const s=mid-posX[rootId];
+      const cx=(typeof window!=="undefined"?window.innerWidth:800)/2;
+      const s=cx-posX[rootId];
       Object.keys(posX).forEach(id=>{posX[id]+=s;});
+      const minX=Math.min(...Object.values(posX));
+      if(minX<80){const fix=80-minX;Object.keys(posX).forEach(id=>{posX[id]+=fix;});}
+    } else {
+      const shift=80-Math.min(...allXs);
+      Object.keys(posX).forEach(id=>{posX[id]+=shift;});
     }
-    const shift=80-Math.min(...Object.values(posX));
-    Object.keys(posX).forEach(id=>{posX[id]+=shift;});
   }
 
   m.forEach(x=>{x.x=posX[x.id]??80;x.y=(gen[x.id]??0)*220+100;});
@@ -264,12 +267,13 @@ function Avatar({photo,name,size=70,gender,deceased}){
     margin:"0 auto"}}>{!photo&&ini}</div>;
 }
 
-function PersonNode({m,onTap}){
+function PersonNode({m,onTap,relation}){
   const d=getDisplay(m);
   const age=calcAge(m.birthDate,m.deceased?m.deathDate:null);
   const txt={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 4px"};
+  const opacity=relation==="medium"?0.5:relation==="distant"?0.25:1;
   return (
-    <foreignObject x={m.x-75} y={m.y-55} width={150} height={130}>
+    <foreignObject x={m.x-75} y={m.y-55} width={150} height={130} opacity={opacity}>
       <div onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden"}}>
         <Avatar photo={m.photo} name={d.full} size={70} gender={m.gender} deceased={m.deceased}/>
         <div style={{marginTop:4,fontSize:14,fontWeight:700,color:m.deceased?"#888":"#000",...txt}}>
@@ -390,6 +394,37 @@ function PhotoUpload({photo,gender,name,onUp}){
 }
 
 /* ── Main App ── */
+function getRelation(memberId,rootId,members){
+  if(!rootId)return"distant";
+  if(memberId===rootId)return"self";
+  const byId=Object.fromEntries(members.map(m=>[m.id,m]));
+  const root=byId[rootId];if(!root)return"distant";
+  const partners=parsePartners(root.partnerships).map(p=>p.partnerId);
+  if(partners.includes(memberId))return"close";
+  const parents=[root.parent1Id,root.parent2Id].filter(Boolean);
+  if(parents.includes(memberId))return"close";
+  const children=members.filter(m=>m.parent1Id===rootId||m.parent2Id===rootId).map(m=>m.id);
+  if(children.includes(memberId))return"close";
+  if(parents.length){
+    const sibs=members.filter(m=>m.id!==rootId&&parents.some(p=>m.parent1Id===p||m.parent2Id===p)).map(m=>m.id);
+    if(sibs.includes(memberId))return"close";
+  }
+  const gps=parents.flatMap(pid=>{const p=byId[pid];return p?[p.parent1Id,p.parent2Id].filter(Boolean):[];});
+  if(gps.includes(memberId))return"medium";
+  const gcs=children.flatMap(cid=>members.filter(m=>m.parent1Id===cid||m.parent2Id===cid).map(m=>m.id));
+  if(gcs.includes(memberId))return"medium";
+  const parentsPartners=parents.flatMap(pid=>{const p=byId[pid];return p?parsePartners(p.partnerships).map(x=>x.partnerId).filter(id=>id!==rootId):[];});
+  if(parentsPartners.includes(memberId))return"medium";
+  const childPartners=children.flatMap(cid=>{const c=byId[cid];return c?parsePartners(c.partnerships).map(x=>x.partnerId):[];});
+  if(childPartners.includes(memberId))return"medium";
+  if(parents.length){
+    const sibs=members.filter(m=>m.id!==rootId&&parents.some(p=>m.parent1Id===p||m.parent2Id===p));
+    const sibPartners=sibs.flatMap(s=>parsePartners(s.partnerships).map(x=>x.partnerId));
+    if(sibPartners.includes(memberId))return"medium";
+  }
+  return"distant";
+}
+
 function App(){
   const [members,setMembers]=useState([]);
   const [sel,setSel]=useState(null);
@@ -405,6 +440,7 @@ function App(){
   const familyRootRef=useRef(localStorage.getItem("familyRoot"));
   const isLocal=useRef(false);
   const autoSaveTimer=useRef(null);
+  const canvasRef=useRef(null);
 
   const flash=msg=>{setToast(msg);setTimeout(()=>setToast(null),2000);};
 
@@ -534,6 +570,12 @@ function App(){
 
   const fit=()=>{if(!members.length)return;const xs=members.map(m=>m.x);const ys=members.map(m=>m.y);const tw=Math.max(...xs)-Math.min(...xs)+300;const th=Math.max(...ys)-Math.min(...ys)+300;const vw=window.innerWidth;const vh=window.innerHeight-60;setZoom(Math.min(vw/tw,vh/th,1));};
   useEffect(()=>{if(members.length>0){const xs=members.map(m=>m.x);const ys=members.map(m=>m.y);const tw=Math.max(...xs)-Math.min(...xs)+300;const th=Math.max(...ys)-Math.min(...ys)+300;const vw=window.innerWidth;const vh=window.innerHeight-60;setZoom(Math.min(vw/tw,vh/th,1));}},[members.length]);
+  useEffect(()=>{
+    if(!familyRoot||!members.length||!canvasRef.current)return;
+    const rm=members.find(m=>m.id===familyRoot);if(!rm)return;
+    const vw=window.innerWidth;const vh=window.innerHeight-60;
+    canvasRef.current.scrollTo({left:Math.max(0,rm.x*zoom-vw/2),top:Math.max(0,rm.y*zoom-vh/2)});
+  },[familyRoot,members.length]);
 
   if(loading)return <div style={{width:"100%",height:"100vh",background:"#F2F2F7",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
     <span style={{fontSize:48}}>🌳</span><span style={{color:"rgba(60,60,67,0.6)",fontSize:16}}>Cargando…</span></div>;
@@ -581,11 +623,11 @@ function App(){
     </div>
 
     {/* Canvas */}
-    <div style={{flex:1,overflow:"auto",background:"#F2F2F7"}}>
+    <div ref={canvasRef} style={{flex:1,overflow:"auto",background:"#F2F2F7"}}>
       <svg width={svgW*zoom} height={svgH*zoom} style={{display:"block"}}>
         <g transform={`scale(${zoom})`}>
           <TreeLines members={members}/>
-          {members.map(m=><PersonNode key={m.id} m={m} onTap={tapCard}/>)}
+          {members.map(m=><PersonNode key={m.id} m={m} onTap={tapCard} relation={getRelation(m.id,familyRoot,members)}/>)}
         </g>
       </svg>
     </div>
