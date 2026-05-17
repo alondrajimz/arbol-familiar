@@ -196,7 +196,14 @@ function autoLayout(members, rootId){
           posX[u.ids[1]]=cx+CG/2;
           cur=cx+CG/2+MG;
         } else {
-          const x=Math.max(ideal??cur, cur);
+          let x;
+          if(ideal!=null){
+            x=Math.max(ideal,cur);
+          } else {
+            const genXs=gms.map(n=>posX[n.id]).filter(v=>v!=null);
+            const minSafe=genXs.length?Math.max(...genXs)+MG:80;
+            x=Math.max(minSafe,cur);
+          }
           posX[u.ids[0]]=x;
           cur=x+MG;
         }
