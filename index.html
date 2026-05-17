@@ -659,7 +659,9 @@ function App(){
         {members.filter(m=>{
           if(m.id===sel)return false;
           const actual=parsePartners(m.partnerships).find(x=>x.type==="actual");
-          return !actual||actual.partnerId===sel;
+          if(actual&&actual.partnerId!==sel)return false;
+          if(m.birthDate){const age=calcAge(m.birthDate,null);if(age!==null&&age<18)return false;}
+          return true;
         }).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
       </Sel>
       <button onClick={saveForm} style={{width:"100%",marginTop:16,padding:"14px 0",background:"#007AFF",border:"none",borderRadius:12,color:"#fff",fontSize:17,fontWeight:600,cursor:"pointer"}}>
