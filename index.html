@@ -488,8 +488,8 @@ function App(){
 
   // Open panels
   const tapCard=id=>{setSel(id);setPanel("view");};
-  const openAdd=()=>{setForm({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",residence:"",phone:"",email:"",facebook:"",instagram:"",parent1Id:"",parent2Id:"",partnerIdNew:"",photo:null});setPanel("add");};
-  const openEdit=()=>{if(!selM)return;setForm({...selM,partnerIdNew:""});setPanel("edit");};
+  const openAdd=()=>{setForm({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",deceased:false,deathDate:"",deathPlace:"",residence:"",phone:"",email:"",facebook:"",instagram:"",parent1Id:"",parent2Id:"",partnerIdNew:"",hijos:[],photo:null});setPanel("add");};
+  const openEdit=()=>{if(!selM)return;const hijos=members.filter(m=>m.parent1Id===sel||m.parent2Id===sel).map(m=>m.id);setForm({...selM,partnerIdNew:"",hijos});setPanel("edit");};
   const openPartners=()=>{if(!selM)return;setPForm({partnerId:"",type:"actual"});setPanel("partners");};
 
   const saveForm=async()=>{
@@ -524,6 +524,16 @@ function App(){
           return{...m,partnerships:[...m.partnerships,{partnerId:sel,type:"actual"}]};
         return m;
       }));
+    }
+    // Link children: set parent1Id or parent2Id on each selected child
+    if(fdata.hijos&&fdata.hijos.length){
+      fdata.hijos.forEach(hijoId=>{
+        const hijo=members.find(m=>m.id===hijoId);if(!hijo)return;
+        if(!hijo.parent1Id||hijo.parent1Id===targetId)
+          dbRef.child(hijoId).update({parent1Id:targetId});
+        else if(!hijo.parent2Id||hijo.parent2Id===targetId)
+          dbRef.child(hijoId).update({parent2Id:targetId});
+      });
     }
     setPanel(null);
   };
@@ -719,6 +729,17 @@ function App(){
           const actual=parsePartners(m.partnerships).find(x=>x.type==="actual");
           if(actual&&actual.partnerId!==sel)return false;
           if(m.birthDate){const age=calcAge(m.birthDate,null);if(age!==null&&age<18)return false;}
+          return true;
+        }).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
+      </Sel>
+      <SecTitle>Hijos</SecTitle>
+      {(form.hijos||[]).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,padding:"0 14px 8px"}}>{(form.hijos||[]).map(id=>{const p=members.find(m=>m.id===id);if(!p)return null;return <div key={id} style={{display:"flex",alignItems:"center",gap:4,background:"rgba(120,120,128,0.12)",borderRadius:100,padding:"4px 10px",fontSize:13}}><span>{getDisplay(p).full}</span><span onClick={()=>setForm({...form,hijos:(form.hijos||[]).filter(x=>x!==id)})} style={{cursor:"pointer",color:"#FF3B30",fontWeight:700,marginLeft:2}}>×</span></div>;})}</div>}
+      <Sel value="" onChange={e=>{const id=e.target.value;if(id)setForm({...form,hijos:[...(form.hijos||[]),id]});}}>
+        <option value="">— Agregar hijo/a —</option>
+        {members.filter(m=>{
+          if(m.id===sel)return false;
+          if((form.hijos||[]).includes(m.id))return false;
+          if(form.birthDate&&m.birthDate){const diff=calcAge(m.birthDate,null);const pAge=calcAge(form.birthDate,null);if(diff!==null&&pAge!==null&&pAge-diff<18)return false;}
           return true;
         }).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
       </Sel>
