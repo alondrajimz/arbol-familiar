@@ -676,7 +676,7 @@ function App(){
           {label:"+",onClick:()=>setZoom(z=>Math.min(z+0.15,2.5)),bg:"rgba(120,120,128,0.12)"},
           {label:"−",onClick:()=>setZoom(z=>Math.max(z-0.15,0.2)),bg:"rgba(120,120,128,0.12)"},
           {label:"Ajustar",onClick:fit,bg:"rgba(120,120,128,0.12)"},
-          {label:"👥 Personas",onClick:()=>setShowPersonas(true),bg:"rgba(120,120,128,0.12)"},
+          {label:"👥",onClick:()=>setShowPersonas(true),bg:"rgba(120,120,128,0.12)"},
           {label:"Guardar",onClick:manualSave,bg:"#34C759",color:"#fff"},
           {label:"Agregar",onClick:openAdd,bg:"#007AFF",color:"#fff"},
           ...(sel?[
@@ -830,14 +830,14 @@ function App(){
 
     {/* Personas drawer */}
     {showPersonas&&<>
-      <div onClick={()=>setShowPersonas(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:70}}/>
-      <div style={{position:"fixed",top:0,right:0,bottom:0,width:"min(320px,85vw)",zIndex:80,background:"#F2F2F7",animation:"slideInRight .28s ease-out",display:"flex",flexDirection:"column",paddingBottom:"env(safe-area-inset-bottom,20px)"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px 10px",borderBottom:"0.5px solid rgba(60,60,67,0.12)",background:"rgba(249,249,249,0.95)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"}}>
+      <div onClick={()=>setShowPersonas(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:998}}/>
+      <div style={{position:"fixed",top:0,right:0,bottom:0,width:300,height:"100vh",zIndex:999,background:"#fff",animation:"slideInRight .28s ease-out",display:"flex",flexDirection:"column",paddingBottom:"env(safe-area-inset-bottom,20px)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px 10px",borderBottom:"0.5px solid rgba(60,60,67,0.12)"}}>
           <span style={{fontSize:17,fontWeight:600}}>Personas</span>
           <button onClick={()=>setShowPersonas(false)} style={{background:"none",border:"none",color:"#007AFF",fontSize:17,cursor:"pointer"}}>Cerrar</button>
         </div>
         <div style={{overflowY:"auto",flex:1}}>
-          {[...members].sort((a,b)=>getDisplay(a).full.localeCompare(getDisplay(b).full)).map(m=>{
+          {[...members].sort((a,b)=>(a.firstName||"").localeCompare(b.firstName||"")).map(m=>{
             const d=getDisplay(m);
             const age=calcAge(m.birthDate,m.deceased?m.deathDate:null);
             return <div key={m.id} onClick={()=>{
