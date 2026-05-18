@@ -30,6 +30,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;backgroun
 input,select,button{font-family:inherit}
 @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 @keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}
 </style>
 </head>
 <body>
@@ -469,6 +470,7 @@ function App(){
   const [familyRoot,setFamilyRoot]=useState(()=>localStorage.getItem("familyRoot"));
   const [showRootModal,setShowRootModal]=useState(()=>!localStorage.getItem("familyRoot"));
   const [rootSelect,setRootSelect]=useState(()=>localStorage.getItem("familyRoot")||"");
+  const [showPersonas,setShowPersonas]=useState(false);
   const familyRootRef=useRef(localStorage.getItem("familyRoot"));
   const isLocal=useRef(false);
   const autoSaveTimer=useRef(null);
@@ -674,6 +676,7 @@ function App(){
           {label:"+",onClick:()=>setZoom(z=>Math.min(z+0.15,2.5)),bg:"rgba(120,120,128,0.12)"},
           {label:"−",onClick:()=>setZoom(z=>Math.max(z-0.15,0.2)),bg:"rgba(120,120,128,0.12)"},
           {label:"Ajustar",onClick:fit,bg:"rgba(120,120,128,0.12)"},
+          {label:"👥 Personas",onClick:()=>setShowPersonas(true),bg:"rgba(120,120,128,0.12)"},
           {label:"Guardar",onClick:manualSave,bg:"#34C759",color:"#fff"},
           {label:"Agregar",onClick:openAdd,bg:"#007AFF",color:"#fff"},
           ...(sel?[
@@ -824,6 +827,39 @@ function App(){
       </Sel>
       <button onClick={addPartner} disabled={!pForm.partnerId} style={{width:"100%",padding:"12px 0",background:pForm.partnerId?"#007AFF":"rgba(120,120,128,0.12)",border:"none",borderRadius:12,color:pForm.partnerId?"#fff":"#999",fontSize:16,fontWeight:600,cursor:pForm.partnerId?"pointer":"default"}}>Agregar pareja</button>
     </div>)}
+
+    {/* Personas drawer */}
+    {showPersonas&&<>
+      <div onClick={()=>setShowPersonas(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:70}}/>
+      <div style={{position:"fixed",top:0,right:0,bottom:0,width:"min(320px,85vw)",zIndex:80,background:"#F2F2F7",animation:"slideInRight .28s ease-out",display:"flex",flexDirection:"column",paddingBottom:"env(safe-area-inset-bottom,20px)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px 10px",borderBottom:"0.5px solid rgba(60,60,67,0.12)",background:"rgba(249,249,249,0.95)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"}}>
+          <span style={{fontSize:17,fontWeight:600}}>Personas</span>
+          <button onClick={()=>setShowPersonas(false)} style={{background:"none",border:"none",color:"#007AFF",fontSize:17,cursor:"pointer"}}>Cerrar</button>
+        </div>
+        <div style={{overflowY:"auto",flex:1}}>
+          {[...members].sort((a,b)=>getDisplay(a).full.localeCompare(getDisplay(b).full)).map(m=>{
+            const d=getDisplay(m);
+            const age=calcAge(m.birthDate,m.deceased?m.deathDate:null);
+            return <div key={m.id} onClick={()=>{
+              setShowPersonas(false);
+              saveRoot(m.id);
+              setTimeout(()=>{
+                if(!canvasRef.current)return;
+                const rm=members.find(x=>x.id===m.id);if(!rm)return;
+                const vw=window.innerWidth,vh=window.innerHeight-60;
+                canvasRef.current.scrollTo({left:Math.max(0,rm.x*zoom-vw/2),top:Math.max(0,rm.y*zoom-vh/2),behavior:"smooth"});
+              },80);
+            }} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",borderBottom:"0.5px solid rgba(60,60,67,0.07)",cursor:"pointer",background:familyRoot===m.id?"rgba(0,122,255,0.08)":"transparent"}}>
+              <Avatar photo={m.photo} name={d.full} size={40} gender={m.gender} deceased={m.deceased}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:15,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{d.full}</div>
+                <div style={{fontSize:12,color:"#888"}}>{age!==null?`${age} años · `:""}{m.deceased?"🕊️":"💚"}</div>
+              </div>
+            </div>;
+          })}
+        </div>
+      </div>
+    </>}
 
     {/* Root person chip */}
     {familyRoot&&(()=>{const rm=members.find(m=>m.id===familyRoot);if(!rm)return null;return <div onClick={()=>{setRootSelect(familyRoot);setShowRootModal(true);}} style={{position:"fixed",bottom:20,right:20,zIndex:50,background:"#fff",borderRadius:100,padding:"6px 12px 6px 6px",display:"flex",alignItems:"center",gap:8,boxShadow:"0 2px 12px rgba(0,0,0,0.18)",cursor:"pointer"}}><Avatar photo={rm.photo} name={getDisplay(rm).full} size={32} gender={rm.gender}/><span style={{fontSize:13,fontWeight:600}}>{getDisplay(rm).first}</span></div>;})()}
