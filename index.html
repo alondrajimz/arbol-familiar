@@ -58,7 +58,7 @@ function parsePartners(p){if(!p)return[];if(Array.isArray(p))return p;return Obj
 const dateInputSupported=(()=>{try{const i=document.createElement("input");i.setAttribute("type","date");i.value="not-a-date";return i.value!=="not-a-date";}catch(e){return false;}})();
 
 /* ── LAYOUT ALGORITHM ── */
-function autoLayout(members, rootId){
+function autoLayout(members){
   try{
   if(!members.length)return members;
   const m=members.map(x=>({...x}));
@@ -225,19 +225,11 @@ function autoLayout(members, rootId){
     }
   }
 
-  // E) Center root person at window.innerWidth/2, fallback to minX=80
+  // E) Shift everything so minX=80 (stable, never root-dependent)
   const allXs=Object.values(posX);
   if(allXs.length){
-    if(rootId&&posX[rootId]!=null){
-      const cx=(typeof window!=="undefined"?window.innerWidth:800)/2;
-      const s=cx-posX[rootId];
-      Object.keys(posX).forEach(id=>{posX[id]+=s;});
-      const minX=Math.min(...Object.values(posX));
-      if(minX<80){const fix=80-minX;Object.keys(posX).forEach(id=>{posX[id]+=fix;});}
-    } else {
-      const shift=80-Math.min(...allXs);
-      Object.keys(posX).forEach(id=>{posX[id]+=shift;});
-    }
+    const shift=80-Math.min(...allXs);
+    Object.keys(posX).forEach(id=>{posX[id]+=shift;});
   }
 
   m.forEach(x=>{x.x=posX[x.id]??80;x.y=(gen[x.id]??0)*220+100;});
@@ -246,15 +238,6 @@ function autoLayout(members, rootId){
     const pm=byId[pr.partnerId];if(!pm)return;
     if(x.y!==pm.y){const y=Math.min(x.y,pm.y);x.y=y;pm.y=y;}
   }));
-  // Tag inCoreTree: BFS up ancestors + BFS down descendants from rootId
-  if(rootId&&byId[rootId]){
-    const core=new Set([rootId]);
-    const aq=[rootId];
-    while(aq.length){const id=aq.shift();const nd=byId[id];if(!nd)continue;[nd.parent1Id,nd.parent2Id].filter(Boolean).forEach(pid=>{if(!core.has(pid)){core.add(pid);aq.push(pid);}});}
-    const dq=[rootId];
-    while(dq.length){const id=dq.shift();m.filter(x=>x.parent1Id===id||x.parent2Id===id).forEach(c=>{if(!core.has(c.id)){core.add(c.id);dq.push(c.id);}});}
-    m.forEach(x=>{x.inCoreTree=core.has(x.id);});
-  }
   return m;
   }catch(e){console.error("autoLayout error:",e);return members.map((p,i)=>({...p,x:100+i*160,y:100}));}
 }
@@ -449,10 +432,14 @@ function getRelation(memberId,rootId,members){
     const sibs=members.filter(m=>m.id!==rootId&&parents.some(p=>m.parent1Id===p||m.parent2Id===p)).map(m=>m.id);
     if(sibs.includes(memberId))return"close";
   }
-  // "medium" only if member is part of root's direct ancestor/descendant tree (inCoreTree)
-  // inCoreTree is set by autoLayout; undefined means not yet computed → treat as in-tree
-  const mo=byId[memberId];
-  const inCore=!mo||mo.inCoreTree!==false;
+  // "medium" only if member is in root's ancestor/descendant tree (BFS up + BFS down)
+  const inCore=(()=>{
+    let q=[rootId],vis=new Set();
+    while(q.length){const id=q.shift();if(id===memberId)return true;if(vis.has(id))continue;vis.add(id);const nd=byId[id];if(!nd)continue;[nd.parent1Id,nd.parent2Id].filter(Boolean).forEach(p=>q.push(p));}
+    q=[rootId];vis=new Set();
+    while(q.length){const id=q.shift();if(id===memberId)return true;if(vis.has(id))continue;vis.add(id);members.filter(x=>x.parent1Id===id||x.parent2Id===id).forEach(c=>q.push(c.id));}
+    return false;
+  })();
   const gps=parents.flatMap(pid=>{const p=byId[pid];return p?[p.parent1Id,p.parent2Id].filter(Boolean):[];});
   if(gps.includes(memberId))return inCore?"medium":"distant";
   const gcs=children.flatMap(cid=>members.filter(m=>m.parent1Id===cid||m.parent2Id===cid).map(m=>m.id));
@@ -514,7 +501,7 @@ function App(){
 
   const update=useCallback(fn=>{
     setMembers(prev=>{
-      const next=autoLayout(typeof fn==="function"?fn(prev):fn, familyRootRef.current);
+      const next=autoLayout(typeof fn==="function"?fn(prev):fn);
       if(autoSaveTimer.current)clearTimeout(autoSaveTimer.current);
       autoSaveTimer.current=setTimeout(()=>doSave(next),2000);
       return next;
@@ -526,7 +513,7 @@ function App(){
     familyRootRef.current=id;
     setFamilyRoot(id);
     setShowRootModal(false);
-    setMembers(prev=>autoLayout(prev,id));
+    setMembers(prev=>autoLayout(prev));
   };
 
   const selM=members.find(m=>m.id===sel);
