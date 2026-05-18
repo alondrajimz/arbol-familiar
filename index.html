@@ -854,6 +854,7 @@ function App(){
             return <div key={m.id} onClick={()=>{
               setShowPersonas(false);
               saveRoot(m.id);
+              tapCard(m.id);
               setTimeout(()=>{
                 if(!canvasRef.current)return;
                 const rm=members.find(x=>x.id===m.id);if(!rm)return;
