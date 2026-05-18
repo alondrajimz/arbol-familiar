@@ -300,10 +300,9 @@ function PersonNode({m,onTap,relation}){
   const age=calcAge(m.birthDate,m.deceased?m.deathDate:null);
   const txt={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 4px"};
   const opacity=relation==="medium"?0.6:relation==="distant"?0.2:1;
-  console.log("PersonNode",m.id,relation,opacity);
   return (
-    <foreignObject x={m.x-75} y={m.y-55} width={150} height={130}>
-      <div className={`pn-${m.id}`} onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden",opacity,transform:"translateZ(0)",WebkitTransform:"translateZ(0)"}}>
+    <foreignObject key={m.id} x={m.x-75} y={m.y-55} width={150} height={130}>
+      <div className={`pn-${m.id}`} onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden",opacity}}>
         <Avatar photo={m.photo} name={d.full} size={70} gender={m.gender} deceased={m.deceased}/>
         <div style={{marginTop:4,fontSize:14,fontWeight:700,color:m.deceased?"#888":"#000",...txt}}>
           {m.deceased?"† ":""}{d.first}
