@@ -600,6 +600,16 @@ function App(){
 
   const removePerson=()=>{
     if(!sel||!confirm("¿Eliminar a esta persona?"))return;
+    // Clean all references to sel in Firebase before deleting
+    members.forEach(m=>{
+      if(m.id===sel)return;
+      const upd={};
+      if(m.parent1Id===sel)upd.parent1Id=null;
+      if(m.parent2Id===sel)upd.parent2Id=null;
+      const newPs=m.partnerships.filter(x=>x.partnerId!==sel);
+      if(newPs.length!==m.partnerships.length)upd.partnerships=newPs.length?newPs:null;
+      if(Object.keys(upd).length)dbRef.child(m.id).update(upd);
+    });
     isLocal.current=true;
     dbRef.child(sel).remove();
     update(p=>p.filter(m=>m.id!==sel).map(m=>({...m,
