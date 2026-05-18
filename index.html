@@ -155,6 +155,7 @@ function autoLayout(members, rootId){
           units.push({couple:false,ids:[x.id]});
         }
       });
+      console.log("GEN",g,"UNITS:",units.map(u=>({couple:u.couple,names:u.ids.map(id=>byId[id]?.firstName).join("+")})));
       return units;
     }
 
