@@ -289,9 +289,10 @@ function PersonNode({m,onTap,relation}){
   const age=calcAge(m.birthDate,m.deceased?m.deathDate:null);
   const txt={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 4px"};
   const opacity=relation==="medium"?0.6:relation==="distant"?0.2:1;
+  console.log("PersonNode",m.id,relation,opacity);
   return (
     <foreignObject x={m.x-75} y={m.y-55} width={150} height={130}>
-      <div onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden",opacity}}>
+      <div className={`pn-${m.id}`} onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden",opacity,transform:"translateZ(0)",WebkitTransform:"translateZ(0)"}}>
         <Avatar photo={m.photo} name={d.full} size={70} gender={m.gender} deceased={m.deceased}/>
         <div style={{marginTop:4,fontSize:14,fontWeight:700,color:m.deceased?"#888":"#000",...txt}}>
           {m.deceased?"† ":""}{d.first}
@@ -675,6 +676,7 @@ function App(){
       </div>
     </div>
 
+    <style>{members.map(m=>{const op=relMap[m.id]==="medium"?0.6:relMap[m.id]==="distant"?0.2:1;return`.pn-${m.id}{opacity:${op}!important}`;}).join("")}</style>
     {/* Canvas */}
     <div ref={canvasRef} style={{flex:1,overflow:"auto",background:"#F2F2F7"}}>
       <svg width={svgW*zoom} height={svgH*zoom} style={{display:"block"}}>
