@@ -186,16 +186,23 @@ function autoLayout(members, rootId){
       });
 
       let cur=80;
+      const occupied=[]; // placed node X positions in this generation
       allUnits.forEach(u=>{
         // Ideal X = midpoint of this unit's own direct children
         const childXs=[];
         u.ids.forEach(id=>directKids(id).forEach(c=>{if(posX[c.id]!=null&&!childXs.includes(posX[c.id]))childXs.push(posX[c.id]);}));
         const ideal=childXs.length?(Math.min(...childXs)+Math.max(...childXs))/2:null;
 
+        // Max placed node X so far in this generation
+        const maxOcc=occupied.length?Math.max(...occupied):-Infinity;
+
         if(u.couple){
-          const cx=Math.max(ideal??cur+CG/2, cur+CG/2);
+          let cx=Math.max(ideal??cur+CG/2, cur+CG/2);
+          // Ensure left member is ≥140px right of any placed node
+          if(maxOcc>-Infinity)cx=Math.max(cx,maxOcc+140+CG/2);
           posX[u.ids[0]]=cx-CG/2;
           posX[u.ids[1]]=cx+CG/2;
+          occupied.push(cx-CG/2,cx+CG/2);
           cur=cx+CG/2+MG;
         } else {
           let x;
@@ -206,7 +213,10 @@ function autoLayout(members, rootId){
             const minSafe=genXs.length?Math.max(...genXs)+MG:80;
             x=Math.max(minSafe,cur);
           }
+          // Ensure ≥140px from any placed node
+          if(maxOcc>-Infinity)x=Math.max(x,maxOcc+140);
           posX[u.ids[0]]=x;
+          occupied.push(x);
           cur=x+MG;
         }
       });
