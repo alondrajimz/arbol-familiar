@@ -573,15 +573,16 @@ function PhotoViewModal({photos,initIdx,members,onClose,onUpdateTags}){
 }
 
 /* ── Photos Timeline ── */
-function PhotosTimeline({members,onTapPhoto}){
+function PhotosTimeline({members,visibleIds,onTapPhoto}){
   const allPhotos=[];
   members.forEach(m=>(m.photos||[]).forEach(p=>allPhotos.push({...p,ownerId:m.id})));
-  allPhotos.sort((a,b)=>{
+  const photos=visibleIds?allPhotos.filter(p=>visibleIds.has(p.ownerId)||(p.tags||[]).some(id=>visibleIds.has(id))):allPhotos;
+  photos.sort((a,b)=>{
     const da=a.captureDate||"";const db=b.captureDate||"";
     if(da!==db)return db.localeCompare(da);
     return(b.createdAt||0)-(a.createdAt||0);
   });
-  if(!allPhotos.length)return <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:"rgba(60,60,67,0.5)"}}>
+  if(!photos.length)return <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:"rgba(60,60,67,0.5)"}}>
     <span style={{fontSize:48}}>📷</span>
     <span style={{fontSize:16}}>Sin fotos aún</span>
     <span style={{fontSize:13,textAlign:"center",padding:"0 40px"}}>Abre el perfil de un familiar y toca + en la sección Fotos para agregar</span>
@@ -589,9 +590,9 @@ function PhotosTimeline({members,onTapPhoto}){
   return <div style={{flex:1,overflowY:"auto",padding:4,background:"#F2F2F7"}}>
     <style>{"@media(min-width:600px){.photos-grid{column-count:4!important}}"}</style>
     <div className="photos-grid" style={{columnCount:2,columnGap:4}}>
-      {allPhotos.map((photo,i)=>{
+      {photos.map((photo,i)=>{
         const tagged=(photo.tags||[]).map(id=>members.find(m=>m.id===id)).filter(Boolean);
-        return <div key={photo.id||i} onClick={()=>onTapPhoto(allPhotos,i)}
+        return <div key={photo.id||i} onClick={()=>onTapPhoto(photos,i)}
           style={{breakInside:"avoid",marginBottom:4,cursor:"pointer",borderRadius:10,overflow:"hidden",background:"#fff"}}>
           <img src={photo.url} style={{width:"100%",display:"block"}}/>
           {photo.captureDate&&<div style={{padding:"4px 8px 2px",fontSize:11,color:"#888"}}>{fmtCaptureDate(photo.captureDate)}</div>}
@@ -1063,6 +1064,7 @@ function App(){
     const allIds=new Set([...core,...desc,...partners]);
     return members.filter(m=>allIds.has(m.id));
   })();
+  const getVisibleMembers=()=>displayedMembers;
   if(loading)return <div style={{width:"100%",height:"100vh",background:"#F2F2F7",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
     <span style={{fontSize:48}}>🌳</span><span style={{color:"rgba(60,60,67,0.6)",fontSize:16}}>Cargando…</span></div>;
 
@@ -1117,8 +1119,8 @@ function App(){
     </div>
 
     {/* Calendar or Photos or Canvas */}
-    {showCalendar&&<CalendarView members={members} onTapPerson={id=>{setShowCalendar(false);tapCard(id);}}/>}
-    {showPhotos&&<PhotosTimeline members={members} onTapPhoto={(photos,idx)=>setPhotoView({photos,idx})}/>}
+    {showCalendar&&<CalendarView members={getVisibleMembers()} onTapPerson={id=>{setShowCalendar(false);tapCard(id);}}/>}
+    {showPhotos&&<PhotosTimeline members={members} visibleIds={familyView==="general"?null:new Set(getVisibleMembers().map(m=>m.id))} onTapPhoto={(photos,idx)=>setPhotoView({photos,idx})}/>}
     <div ref={canvasRef} style={{flex:1,overflow:"auto",background:"#F2F2F7",display:(showCalendar||showPhotos)?"none":"block"}}>
       <svg width={svgW*zoom} height={svgH*zoom} style={{display:"block",touchAction:"none"}}
         onTouchStart={e=>{
