@@ -363,7 +363,7 @@ function TreeLines({members}){
     });
   });
 
-  // Parent-child lines grouped by parent pair
+  // Parent-child lines grouped by parent pair (each couple gets its own separate branch)
   const familyGroups={};
   members.forEach(c=>{
     if(!c.parent1Id&&!c.parent2Id)return;
@@ -377,26 +377,38 @@ function TreeLines({members}){
     const children=fam.children;
     if(!parents.length||!children.length)return;
 
-    const parentCenterX=parents.reduce((s,p)=>s+p.x,0)/parents.length;
+    const pCX=parents.reduce((s,p)=>s+p.x,0)/parents.length;
     const parentY=parents[0].y+19;
     const childY=children[0].y-51;
     const midY=(parentY+childY)/2;
+    const sorted=[...children].sort((a,b)=>a.x-b.x);
+    const bL=sorted[0].x, bR=sorted[sorted.length-1].x;
 
+    // Vertical line from this couple's center down to junction level
     lines.push(<line key={`pv-${fam.parents.join("-")}`}
-      x1={parentCenterX} y1={parentY} x2={parentCenterX} y2={midY}
+      x1={pCX} y1={parentY} x2={pCX} y2={midY}
       stroke="#bbb" strokeWidth={2} strokeOpacity={1}/>);
 
-    const childXs=children.map(c=>c.x).sort((a,b)=>a-b);
-    const barLeft=Math.min(parentCenterX,childXs[0]);
-    const barRight=Math.max(parentCenterX,childXs[childXs.length-1]);
-
-    if(children.length>1||Math.abs(parentCenterX-childXs[0])>5){
-      lines.push(<line key={`ph-${fam.parents.join("-")}`}
-        x1={barLeft} y1={midY} x2={barRight} y2={midY}
+    // Elbow connector if couple center is outside the children's X range
+    if(pCX<bL){
+      lines.push(<line key={`pe-${fam.parents.join("-")}`}
+        x1={pCX} y1={midY} x2={bL} y2={midY}
+        stroke="#bbb" strokeWidth={2} strokeOpacity={1}/>);
+    }else if(pCX>bR){
+      lines.push(<line key={`pe-${fam.parents.join("-")}`}
+        x1={bR} y1={midY} x2={pCX} y2={midY}
         stroke="#bbb" strokeWidth={2} strokeOpacity={1}/>);
     }
 
-    children.forEach(c=>{
+    // Horizontal bar spanning ONLY this couple's children (not extended to parent center)
+    if(children.length>1){
+      lines.push(<line key={`ph-${fam.parents.join("-")}`}
+        x1={bL} y1={midY} x2={bR} y2={midY}
+        stroke="#bbb" strokeWidth={2} strokeOpacity={1}/>);
+    }
+
+    // Vertical lines from bar down to each child
+    sorted.forEach(c=>{
       lines.push(<line key={`cv-${c.id}`}
         x1={c.x} y1={midY} x2={c.x} y2={childY}
         stroke="#bbb" strokeWidth={2} strokeOpacity={1}/>);
