@@ -153,7 +153,7 @@ function autoLayout(members){
       const done=new Set();const units=[];
       fam.forEach(x=>{
         if(done.has(x.id))return;done.add(x.id);
-        const pr=parsePartners(x.partnerships).sort((a,b)=>(a.type==="actual"?0:1)-(b.type==="actual"?0:1)).find(p=>byId[p.partnerId]&&gen[p.partnerId]===g&&!done.has(p.partnerId));
+        const pr=parsePartners(x.partnerships).sort((a,b)=>(a.type==="casado"?0:1)-(b.type==="casado"?0:1)).find(p=>byId[p.partnerId]&&gen[p.partnerId]===g&&!done.has(p.partnerId));
         if(pr){
           const pm=byId[pr.partnerId];done.add(pm.id);
           const mLeft=x.gender==="M"||(x.gender!=="F"&&pm.gender==="F");
@@ -333,8 +333,8 @@ function TreeLines({members}){
       const x1=Math.min(m.x,sp.x)+35,x2=Math.max(m.x,sp.x)-35;
       const y=(m.y+sp.y)/2-16;
       lines.push(<line key={`couple-${key}`} x1={x1} y1={y} x2={x2} y2={y}
-        stroke={pr.type!=="actual"?"#ccc":"#bbb"} strokeWidth={2}
-        strokeOpacity={1} strokeDasharray={pr.type!=="actual"?"5 4":"none"}/>);
+        stroke={pr.type==="casado"?"#e94b8b":"#999"} strokeWidth={2}
+        strokeOpacity={1} strokeDasharray={pr.type==="casado"?"none":"5 4"}/>);
     });
   });
 
@@ -895,7 +895,7 @@ function App(){
   const [sel,setSel]=useState(null);
   const [panel,setPanel]=useState(null); // "view"|"edit"|"add"|"partners"
   const [form,setForm]=useState({});
-  const [pForm,setPForm]=useState({partnerId:"",type:"actual"});
+  const [pForm,setPForm]=useState({partnerId:"",type:"casado"});
   const [editPartner,setEditPartner]=useState(null); // {partnerId,type}
   const [toast,setToast]=useState(null);
   const [zoom,setZoom]=useState(1);
@@ -930,11 +930,18 @@ function App(){
       if(isLocal.current){isLocal.current=false;return;}
       const val=snap.val();
       if(!val){setLoading(false);return;}
-      const arr=Object.entries(val).map(([k,v])=>({
-        ...v,id:v.id||k,
-        partnerships:parsePartners(v.partnerships),
-        photo:v.photo||null
-      }));
+      const arr=Object.entries(val).map(([k,v])=>{
+        const partnerships=parsePartners(v.partnerships);
+        partnerships.forEach(p=>{
+          if(p.type==="actual")p.type="casado";
+          else if(p.type==="anterior"||p.type==="ex")p.type="divorciado";
+        });
+        return {
+          ...v,id:v.id||k,
+          partnerships,
+          photo:v.photo||null
+        };
+      });
       setMembers(autoLayout(arr));
       setLoading(false);
     });
@@ -1466,8 +1473,8 @@ function App(){
     {panel==="partners"&&selM&&sheet("Parejas de "+getDisplay(selM).first,close,<div style={{display:"flex",flexDirection:"column",gap:12}}>
       {selM.partnerships.map(pr=>{
         const p=members.find(m=>m.id===pr.partnerId);if(!p)return null;
-        const prColors={actual:"#34C759",ex:"#888",divorciado:"#FF9500",viudo:"#3a3a3c"};
-        const prLabels={actual:"Pareja actual",ex:"Ex pareja",divorciado:"Divorciado/a",viudo:"Viudo/a"};
+        const prColors={casado:"#34C759",divorciado:"#FF9500",viudo:"#3a3a3c"};
+        const prLabels={casado:"Casado/a",divorciado:"Divorciado/a",viudo:"Viudo/a"};
         return <div key={pr.partnerId} style={{background:"#fff",borderRadius:12,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div onClick={()=>setEditPartner({partnerId:pr.partnerId,type:pr.type})} style={{display:"flex",alignItems:"center",gap:10,flex:1,cursor:"pointer"}}>
             <Avatar photo={p.photo} name={getDisplay(p).full} size={40} gender={p.gender}/>
@@ -1484,23 +1491,22 @@ function App(){
         {members.filter(m=>m.id!==sel&&!selM.partnerships.find(x=>x.partnerId===m.id)).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
       </Sel>
       <Sel value={pForm.type} onChange={e=>setPForm({...pForm,type:e.target.value})}>
-        <option value="actual">Pareja actual</option>
-        <option value="ex">Ex pareja</option>
+        <option value="casado">Casado/a</option>
         <option value="divorciado">Divorciado/a</option>
         <option value="viudo">Viudo/a</option>
       </Sel>
       <button onClick={addPartner} disabled={!pForm.partnerId} style={{width:"100%",padding:"12px 0",background:pForm.partnerId?"#007AFF":"rgba(120,120,128,0.12)",border:"none",borderRadius:12,color:pForm.partnerId?"#fff":"#999",fontSize:16,fontWeight:600,cursor:pForm.partnerId?"pointer":"default"}}>Agregar pareja</button>
       {editPartner&&(()=>{
         const ep=members.find(m=>m.id===editPartner.partnerId);if(!ep)return null;
-        const prColors={actual:"#34C759",ex:"#888",divorciado:"#FF9500",viudo:"#3a3a3c"};
-        const prLabels={actual:"Pareja actual",ex:"Ex pareja",divorciado:"Divorciado/a",viudo:"Viudo/a"};
+        const prColors={casado:"#34C759",divorciado:"#FF9500",viudo:"#3a3a3c"};
+        const prLabels={casado:"Casado/a",divorciado:"Divorciado/a",viudo:"Viudo/a"};
         const sel_type=editPartner.type;
         return <>
           <div onClick={()=>setEditPartner(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200}}/>
           <div style={{position:"fixed",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:201,background:"#F2F2F7",borderRadius:16,padding:20,width:"min(320px,90vw)",display:"flex",flexDirection:"column",gap:12}}>
             <div style={{fontSize:16,fontWeight:700,textAlign:"center"}}>{getDisplay(ep).full}</div>
             <div style={{fontSize:13,color:"#888",textAlign:"center",marginTop:-6}}>Cambiar estado de relación</div>
-            {["actual","ex","divorciado","viudo"].map(t=>(
+            {["casado","divorciado","viudo"].map(t=>(
               <button key={t} onClick={()=>setEditPartner({...editPartner,type:t})} style={{padding:"11px 14px",borderRadius:10,border:`2px solid ${sel_type===t?prColors[t]:"rgba(120,120,128,0.2)"}`,background:sel_type===t?"rgba(0,0,0,0.04)":"#fff",color:sel_type===t?prColors[t]:"#444",fontSize:15,fontWeight:sel_type===t?700:400,cursor:"pointer",textAlign:"left"}}>
                 <span style={{color:prColors[t],marginRight:8}}>●</span>{prLabels[t]}
               </button>
