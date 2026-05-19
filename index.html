@@ -175,10 +175,17 @@ function autoLayout(members){
       return units;
     }
 
+    // Helper: do two famKeys share at least one parent? (indicates half-sibling groups)
+    function sharesParent(fk1,fk2){const a=fk1.split("|").filter(Boolean);const b=fk2.split("|").filter(Boolean);return a.some(p=>p&&b.includes(p));}
+
     if(g===maxG){
       // C) Bottom generation: lay out families sequentially with FG between families
       let cur=80;
+      let prevFkC=null;
       famKeys.forEach((fk,fi)=>{
+        // Extra 80px gap between half-sibling groups (same shared parent, different other parent)
+        if(prevFkC!==null&&sharesParent(prevFkC,fk))cur+=80;
+        prevFkC=fk;
         const units=buildUnits(famMap[fk]);
         units.forEach(u=>{
           if(u.couple){
@@ -202,9 +209,17 @@ function autoLayout(members){
         return avgChildX(a)-avgChildX(b);
       });
 
+      // Map member → famKey for half-sibling gap detection
+      const mFk={};famKeys.forEach(fk=>famMap[fk].forEach(x=>mFk[x.id]=fk));
+
       let cur=80;
       const occupied=[]; // placed node X positions in this generation
+      let prevUFk=null;
       allUnits.forEach(u=>{
+        // Extra 80px gap when transitioning between half-sibling groups
+        const curUFk=mFk[u.ids[0]]||null;
+        if(prevUFk&&curUFk&&prevUFk!==curUFk&&sharesParent(prevUFk,curUFk))cur+=80;
+        if(curUFk)prevUFk=curUFk;
         // Ideal X = midpoint of this unit's own direct children
         const childXs=[];
         u.ids.forEach(id=>directKids(id).forEach(c=>{if(posX[c.id]!=null&&!childXs.includes(posX[c.id]))childXs.push(posX[c.id]);}));
