@@ -590,15 +590,31 @@ function CalendarView({members,onTapPerson}){
         if(!day)return <div key={`x${i}`}/>;
         const evs=evMap[day]||[];
         const hit=evs.length>0;
+        // Avatar with emoji badge helper
+        const EvAvatar=({ev,size})=><div style={{position:"relative",display:"inline-block",textAlign:"center"}}>
+          <Avatar photo={ev.member.photo} name={getDisplay(ev.member).full} size={size} gender={ev.member.gender} deceased={ev.member.deceased}/>
+          <span style={{position:"absolute",top:-2,right:-2,fontSize:10,lineHeight:1}}>{ev.type==="birthday"?"🎉":"🕊️"}</span>
+          <div style={{fontSize:9,color:"rgba(60,60,67,0.55)",lineHeight:1,marginTop:1}}>{ev.years}a</div>
+        </div>;
+        // Layout based on count
+        let avatarBlock=null;
+        if(evs.length===1){
+          avatarBlock=<div style={{display:"flex",justifyContent:"center",alignItems:"center",flex:1}}><EvAvatar ev={evs[0]} size={44}/></div>;
+        } else if(evs.length===2){
+          avatarBlock=<div style={{display:"flex",justifyContent:"space-around",alignItems:"center",flex:1}}>
+            {evs.map((ev,ei)=><EvAvatar key={ei} ev={ev} size={30}/>)}
+          </div>;
+        } else {
+          avatarBlock=<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:1,flex:1}}>
+            {evs.slice(0,4).map((ev,ei)=><div key={ei} style={{display:"flex",justifyContent:"center",alignItems:"center"}}><EvAvatar ev={ev} size={24}/></div>)}
+            {evs.length>4&&<div style={{fontSize:8,color:"#007AFF",textAlign:"center",alignSelf:"center"}}>+{evs.length-4}</div>}
+          </div>;
+        }
         return <div key={day} onClick={hit?()=>setDaySheet(evs):undefined}
-          style={{background:"#fff",borderRadius:10,padding:"4px 3px",minHeight:72,cursor:hit?"pointer":"default",
-            border:isToday(day)?"2px solid #007AFF":"2px solid transparent",boxSizing:"border-box"}}>
-          <div style={{fontSize:12,fontWeight:isToday(day)?700:400,color:isToday(day)?"#007AFF":"#1c1c1e",marginBottom:2}}>{day}</div>
-          {evs.slice(0,2).map((ev,ei)=><div key={ei} style={{display:"flex",alignItems:"center",gap:2,marginBottom:1}}>
-            <span style={{fontSize:10,lineHeight:1}}>{ev.type==="birthday"?"🎉":"🕊️"}</span>
-            <Avatar photo={ev.member.photo} name={getDisplay(ev.member).full} size={26} gender={ev.member.gender} deceased={ev.member.deceased}/>
-          </div>)}
-          {evs.length>2&&<div style={{fontSize:9,color:"#007AFF",marginTop:1}}>+{evs.length-2}</div>}
+          style={{background:"#fff",borderRadius:10,padding:"3px",minHeight:80,aspectRatio:"1/1",cursor:hit?"pointer":"default",
+            border:isToday(day)?"2px solid #007AFF":"2px solid transparent",boxSizing:"border-box",display:"flex",flexDirection:"column"}}>
+          <div style={{fontSize:11,fontWeight:isToday(day)?700:400,color:isToday(day)?"#007AFF":"#1c1c1e",lineHeight:1,marginBottom:1}}>{day}</div>
+          {avatarBlock}
         </div>;
       })}
     </div>
