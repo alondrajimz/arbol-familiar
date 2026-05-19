@@ -1494,20 +1494,20 @@ function App(){
         const ep=members.find(m=>m.id===editPartner.partnerId);if(!ep)return null;
         const prColors={actual:"#34C759",ex:"#888",divorciado:"#FF9500",viudo:"#3a3a3c"};
         const prLabels={actual:"Pareja actual",ex:"Ex pareja",divorciado:"Divorciado/a",viudo:"Viudo/a"};
-        const [epType,setEpType]=React.useState(editPartner.type);
+        const sel_type=editPartner.type;
         return <>
           <div onClick={()=>setEditPartner(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200}}/>
           <div style={{position:"fixed",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:201,background:"#F2F2F7",borderRadius:16,padding:20,width:"min(320px,90vw)",display:"flex",flexDirection:"column",gap:12}}>
             <div style={{fontSize:16,fontWeight:700,textAlign:"center"}}>{getDisplay(ep).full}</div>
             <div style={{fontSize:13,color:"#888",textAlign:"center",marginTop:-6}}>Cambiar estado de relación</div>
             {["actual","ex","divorciado","viudo"].map(t=>(
-              <button key={t} onClick={()=>setEpType(t)} style={{padding:"11px 14px",borderRadius:10,border:`2px solid ${epType===t?prColors[t]:"rgba(120,120,128,0.2)"}`,background:epType===t?"rgba(0,0,0,0.04)":"#fff",color:epType===t?prColors[t]:"#444",fontSize:15,fontWeight:epType===t?700:400,cursor:"pointer",textAlign:"left"}}>
+              <button key={t} onClick={()=>setEditPartner({...editPartner,type:t})} style={{padding:"11px 14px",borderRadius:10,border:`2px solid ${sel_type===t?prColors[t]:"rgba(120,120,128,0.2)"}`,background:sel_type===t?"rgba(0,0,0,0.04)":"#fff",color:sel_type===t?prColors[t]:"#444",fontSize:15,fontWeight:sel_type===t?700:400,cursor:"pointer",textAlign:"left"}}>
                 <span style={{color:prColors[t],marginRight:8}}>●</span>{prLabels[t]}
               </button>
             ))}
             <div style={{display:"flex",gap:10,marginTop:4}}>
               <button onClick={()=>setEditPartner(null)} style={{flex:1,padding:"12px 0",borderRadius:10,border:"none",background:"rgba(120,120,128,0.12)",fontSize:15,cursor:"pointer"}}>Cancelar</button>
-              <button onClick={()=>updatePartnerType(editPartner.partnerId,epType)} style={{flex:1,padding:"12px 0",borderRadius:10,border:"none",background:"#007AFF",color:"#fff",fontSize:15,fontWeight:600,cursor:"pointer"}}>Guardar</button>
+              <button onClick={()=>updatePartnerType(editPartner.partnerId,sel_type)} style={{flex:1,padding:"12px 0",borderRadius:10,border:"none",background:"#007AFF",color:"#fff",fontSize:15,fontWeight:600,cursor:"pointer"}}>Guardar</button>
             </div>
           </div>
         </>;
