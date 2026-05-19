@@ -951,8 +951,8 @@ function App(){
             {label:"−",onClick:()=>setZoom(z=>Math.max(z-0.15,0.2)),bg:"rgba(120,120,128,0.12)"},
             {label:"Ajustar",onClick:fit,bg:"rgba(120,120,128,0.12)"},
           ]:[]),
-          {label:"👥",onClick:()=>setShowPersonas(true),bg:"rgba(120,120,128,0.12)"},
-          {label:"📅",onClick:()=>setShowCalendar(c=>!c),bg:showCalendar?"#007AFF":"rgba(120,120,128,0.12)",color:showCalendar?"#fff":undefined},
+          {label:"👥 Personas",onClick:()=>setShowPersonas(true),bg:"rgba(120,120,128,0.12)"},
+          {label:showCalendar?"🌳 Árbol":"📅 Eventos",onClick:()=>setShowCalendar(c=>!c),bg:showCalendar?"#007AFF":"rgba(120,120,128,0.12)",color:showCalendar?"#fff":undefined},
           {label:"Guardar",onClick:manualSave,bg:"#34C759",color:"#fff"},
           {label:"Agregar",onClick:openAdd,bg:"#007AFF",color:"#fff"},
           ...(!showCalendar&&sel?[
@@ -960,7 +960,7 @@ function App(){
             {label:"Eliminar",onClick:removePerson,bg:"#FF3B30",color:"#fff"},
           ]:[]),
         ].map(({label,onClick,bg,color})=>(
-          <button key={label} onClick={onClick} style={{flexShrink:0,padding:"5px 10px",borderRadius:100,border:"none",background:bg,color:color||"inherit",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
+          <button key={label} onClick={onClick} style={{flexShrink:0,padding:"5px 10px",borderRadius:100,border:"none",background:bg,color:color||"inherit",fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
         ))}
       </div>
     </div>
