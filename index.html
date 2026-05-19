@@ -899,7 +899,41 @@ function App(){
       });
     }
     const logName=[fdata.firstName,fdata.lastName1,fdata.lastName2].filter(Boolean).join(" ");
-    pushLog(familyRoot,panel==="add"?"create":"edit",targetId,logName,panel==="add"?`Agregó a ${logName}`:`Editó a ${logName}`);
+    let logDetails;
+    if(panel==="add"){
+      logDetails=`Agregó a ${logName}`;
+    }else{
+      const prev=members.find(m=>m.id===sel);
+      const diffs=[];
+      if(prev){
+        const oldName=[prev.firstName,prev.lastName1,prev.lastName2].filter(Boolean).join(" ");
+        const newName=[fdata.firstName,fdata.lastName1,fdata.lastName2].filter(Boolean).join(" ");
+        if(oldName!==newName)diffs.push(`Cambió nombre de ${oldName} a ${newName}`);
+        if((prev.birthDate||"")!==(fdata.birthDate||""))diffs.push(`Cambió fecha nacimiento a ${fdata.birthDate||"—"}`);
+        if((prev.phone||"")!==(fdata.phone||""))diffs.push("Actualizó teléfono");
+        if((prev.email||"")!==(fdata.email||""))diffs.push("Actualizó correo");
+        if((prev.photo||"")!==(fdata.photo||""))diffs.push("Cambió foto de perfil");
+        if(!prev.deceased&&fdata.deceased)diffs.push("Marcó como fallecido");
+        if((prev.parent1Id||"")!==(fdata.parent1Id||"")||(prev.parent2Id||"")!==(fdata.parent2Id||""))diffs.push("Cambió padres");
+        const prevHijosD=members.filter(m=>m.parent1Id===targetId||m.parent2Id===targetId).map(m=>m.id);
+        const newHijosD=fdata.hijos||[];
+        newHijosD.filter(id=>!prevHijosD.includes(id)).forEach(id=>{const h=members.find(m=>m.id===id);if(h)diffs.push(`Agregó hijo ${getDisplay(h).first}`);});
+        prevHijosD.filter(id=>!newHijosD.includes(id)).forEach(id=>{const h=members.find(m=>m.id===id);if(h)diffs.push(`Quitó hijo ${getDisplay(h).first}`);});
+        const prevPStr=parsePartners(prev.partnerships).map(p=>p.partnerId+":"+p.type).sort().join(",");
+        const newPArr=parsePartners(fdata.partnerships||[]);
+        if(fdata.partnerIdNew&&!newPArr.find(x=>x.partnerId===fdata.partnerIdNew))newPArr.push({partnerId:fdata.partnerIdNew,type:"actual"});
+        const newPStr=newPArr.map(p=>p.partnerId+":"+p.type).sort().join(",");
+        if(prevPStr!==newPStr){
+          const prevPIds=parsePartners(prev.partnerships).map(p=>p.partnerId);
+          const newPIds=newPArr.map(p=>p.partnerId);
+          const addedP=newPIds.filter(id=>!prevPIds.includes(id));
+          addedP.forEach(id=>{const h=members.find(m=>m.id===id);if(h)diffs.push(`Agregó pareja ${getDisplay(h).first}`);});
+          if(!addedP.length)diffs.push("Cambió estado pareja");
+        }
+      }
+      logDetails=diffs.length===0?"Sin cambios":diffs.length<=3?diffs.join(", "):diffs.slice(0,3).join(", ")+" y más";
+    }
+    pushLog(familyRoot,panel==="add"?"create":"edit",targetId,logName,logDetails);
     setPanel(null);
   };
 
