@@ -25,7 +25,6 @@ firebase.initializeApp({
   appId:"1:671444673579:web:78f637bb24adce2b28b66e"
 });
 const dbRef=firebase.database().ref("familyTree");
-const logsRef=firebase.database().ref("logs");
 </script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -66,8 +65,6 @@ function getDisplay(m){
 }
 function parsePartners(p){if(!p)return[];if(Array.isArray(p))return p;return Object.values(p);}
 const dateInputSupported=(()=>{try{const i=document.createElement("input");i.setAttribute("type","date");i.value="not-a-date";return i.value!=="not-a-date";}catch(e){return false;}})();
-function timeAgo(iso){const s=(Date.now()-new Date(iso).getTime())/1000;if(s<60)return"ahora";if(s<3600)return`hace ${Math.floor(s/60)} min`;if(s<86400)return`hace ${Math.floor(s/3600)} h`;if(s<172800)return"ayer";return`hace ${Math.floor(s/86400)} días`;}
-function pushLog(userId,action,targetId,targetName,details){logsRef.push({timestamp:new Date().toISOString(),userId:userId||null,action,targetId,targetName,details}).catch(()=>{});}
 
 /* ── LAYOUT ALGORITHM ── */
 function autoLayout(members){
@@ -784,8 +781,6 @@ function App(){
   const [showPhotos,setShowPhotos]=useState(false);
   const [photoView,setPhotoView]=useState(null); // {photos,idx}
   const [addPhotoFor,setAddPhotoFor]=useState(null); // memberId
-  const [showLogs,setShowLogs]=useState(false);
-  const [logs,setLogs]=useState([]);
   const familyRootRef=useRef(localStorage.getItem("familyRoot"));
   const isLocal=useRef(false);
   const autoSaveTimer=useRef(null);
@@ -809,15 +804,6 @@ function App(){
       setLoading(false);
     });
     return ()=>dbRef.off();
-  },[]);
-
-  useEffect(()=>{
-    logsRef.limitToLast(100).on("value",snap=>{
-      const val=snap.val();
-      if(!val){setLogs([]);return;}
-      setLogs(Object.values(val).sort((a,b)=>b.timestamp.localeCompare(a.timestamp)));
-    });
-    return()=>logsRef.off();
   },[]);
 
   // Auto save
@@ -905,9 +891,6 @@ function App(){
         if(Object.keys(upd).length)dbRef.child(hijoId).update(upd);
       });
     }
-    const logName=[fdata.firstName,fdata.lastName1,fdata.lastName2].filter(Boolean).join(" ");
-    if(panel==="add")pushLog(familyRoot,"create",targetId,logName,`Agregó a ${logName}`);
-    else pushLog(familyRoot,"edit",targetId,logName,`Editó a ${logName}`);
     setPanel(null);
   };
 
@@ -931,7 +914,6 @@ function App(){
 
   const removePerson=()=>{
     if(!sel||!confirm("¿Eliminar a esta persona?"))return;
-    const deletedName=selM?getDisplay(selM).full:sel;
     // Clean all references to sel in Firebase before deleting
     members.forEach(m=>{
       if(m.id===sel)return;
@@ -944,7 +926,6 @@ function App(){
     });
     isLocal.current=true;
     dbRef.child(sel).remove();
-    pushLog(familyRoot,"delete",sel,deletedName,`Eliminó a ${deletedName}`);
     update(p=>p.filter(m=>m.id!==sel).map(m=>({...m,
       parent1Id:m.parent1Id===sel?null:m.parent1Id,
       parent2Id:m.parent2Id===sel?null:m.parent2Id,
@@ -1333,44 +1314,6 @@ function App(){
       onUpdateTags={(photo,tags)=>{updatePhotoTags(photo,tags);flash("Tags actualizados ✓");}}
       onDelete={photo=>{deletePhoto(photo);flash("Foto eliminada ✓");}}
     />}
-
-    {/* History trigger */}
-    <div onClick={()=>setShowLogs(true)} style={{position:"fixed",bottom:20,left:20,zIndex:50,width:32,height:32,borderRadius:16,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",opacity:0.3,fontSize:18,color:"#fff",fontWeight:700,lineHeight:1}}>⋯</div>
-
-    {/* Historial drawer */}
-    {showLogs&&<>
-      <div onClick={()=>setShowLogs(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:998}}/>
-      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:999,background:"#F2F2F7",borderRadius:"14px 14px 0 0",maxHeight:"72vh",overflowY:"auto",paddingBottom:"env(safe-area-inset-bottom,20px)",animation:"sheetUp .3s ease-out"}}>
-        <div style={{display:"flex",justifyContent:"center",padding:"10px 0 2px"}}><div style={{width:36,height:5,borderRadius:3,background:"rgba(60,60,67,0.15)"}}/></div>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 20px 10px"}}>
-          <button onClick={()=>setShowLogs(false)} style={{background:"none",border:"none",color:"#007AFF",fontSize:17,cursor:"pointer"}}>Cerrar</button>
-          <span style={{fontSize:17,fontWeight:600}}>Historial</span>
-          <div style={{width:50}}/>
-        </div>
-        <div style={{padding:"0 16px 24px",display:"flex",flexDirection:"column",gap:8}}>
-          {logs.length===0&&<div style={{textAlign:"center",color:"rgba(60,60,67,0.4)",padding:32,fontSize:15}}>Sin cambios registrados</div>}
-          {logs.map((log,i)=>{
-            const actor=members.find(m=>m.id===log.userId);
-            const target=members.find(m=>m.id===log.targetId);
-            const aColor=log.action==="create"?"#34C759":log.action==="delete"?"#FF3B30":"#007AFF";
-            const aIcon=log.action==="create"?"+":log.action==="delete"?"×":"✎";
-            return <div key={i} style={{background:"#fff",borderRadius:12,padding:"10px 12px",display:"flex",alignItems:"center",gap:10}}>
-              {actor
-                ?<Avatar photo={actor.photo} name={getDisplay(actor).full} size={36} gender={actor.gender} deceased={actor.deceased}/>
-                :<div style={{width:36,height:36,borderRadius:18,background:"rgba(120,120,128,0.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>👤</div>}
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{log.details}</div>
-                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
-                  <span style={{fontSize:11,color:"rgba(60,60,67,0.45)"}}>{timeAgo(log.timestamp)}</span>
-                  {target&&<span style={{fontSize:11,background:"rgba(0,122,255,0.1)",color:"#007AFF",borderRadius:100,padding:"1px 7px"}}>{getDisplay(target).first}</span>}
-                </div>
-              </div>
-              <div style={{width:22,height:22,borderRadius:11,background:aColor,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:700,flexShrink:0}}>{aIcon}</div>
-            </div>;
-          })}
-        </div>
-      </div>
-    </>}
   </div>;
 }
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
