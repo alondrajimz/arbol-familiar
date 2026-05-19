@@ -11,6 +11,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script>
 firebase.initializeApp({
   apiKey:"AIzaSyBW0CvCK4bS4BOwApcGyPXqcDRrvFm7w7Y",
@@ -389,20 +391,47 @@ function Toggle({value,onChange,labelA,labelB}){
 }
 function PhotoUpload({photo,gender,name,onUp}){
   const inp=useRef(null);
-  const go=e=>{const f=e.target.files?.[0];if(!f)return;
-    const img=new Image(),reader=new FileReader();
-    reader.onload=ev=>{img.onload=()=>{
-      const c=document.createElement("canvas");const max=200;
-      let w=img.width,h=img.height;
-      if(w>h){if(w>max){h=h*(max/w);w=max;}}else{if(h>max){w=w*(max/h);h=max;}}
-      c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);
-      onUp(c.toDataURL("image/jpeg",0.7));
-    };img.src=ev.target.result;};reader.readAsDataURL(f);};
-  return <div onClick={()=>inp.current?.click()} style={{textAlign:"center",cursor:"pointer",padding:12}}>
-    <Avatar photo={photo} name={name||"?"} size={80} gender={gender}/>
-    <div style={{color:"#007AFF",fontSize:13,fontWeight:500,marginTop:6}}>{photo?"Cambiar foto":"Agregar foto"}</div>
-    <input ref={inp} type="file" accept="image/*" onChange={go} style={{display:"none"}}/>
-  </div>;
+  const imgRef=useRef(null);
+  const cropperRef=useRef(null);
+  const [cropSrc,setCropSrc]=useState(null);
+
+  const go=e=>{
+    const f=e.target.files?.[0];if(!f)return;
+    e.target.value="";
+    const reader=new FileReader();
+    reader.onload=ev=>setCropSrc(ev.target.result);
+    reader.readAsDataURL(f);
+  };
+
+  useEffect(()=>{
+    if(!cropSrc||!imgRef.current)return;
+    cropperRef.current=new Cropper(imgRef.current,{aspectRatio:1,viewMode:1,autoCropArea:1,movable:true,zoomable:true,rotatable:false,scalable:false});
+    return()=>{cropperRef.current?.destroy();cropperRef.current=null;};
+  },[cropSrc]);
+
+  const confirm=()=>{
+    if(!cropperRef.current)return;
+    const canvas=cropperRef.current.getCroppedCanvas({width:200,height:200});
+    onUp(canvas.toDataURL("image/jpeg",0.8));
+    setCropSrc(null);
+  };
+
+  return <>
+    <div onClick={()=>inp.current?.click()} style={{textAlign:"center",cursor:"pointer",padding:12}}>
+      <Avatar photo={photo} name={name||"?"} size={80} gender={gender}/>
+      <div style={{color:"#007AFF",fontSize:13,fontWeight:500,marginTop:6}}>{photo?"Cambiar foto":"Agregar foto"}</div>
+      <input ref={inp} type="file" accept="image/*" onChange={go} style={{display:"none"}}/>
+    </div>
+    {cropSrc&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:300,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,padding:20}}>
+      <div style={{maxWidth:320,width:"100%",maxHeight:"60vh",overflow:"hidden"}}>
+        <img ref={imgRef} src={cropSrc} style={{maxWidth:"100%",display:"block"}}/>
+      </div>
+      <div style={{display:"flex",gap:12}}>
+        <button onClick={()=>setCropSrc(null)} style={{padding:"12px 28px",borderRadius:12,border:"none",background:"rgba(255,255,255,0.15)",color:"#fff",fontSize:16,fontWeight:600,cursor:"pointer"}}>Cancelar</button>
+        <button onClick={confirm} style={{padding:"12px 28px",borderRadius:12,border:"none",background:"#007AFF",color:"#fff",fontSize:16,fontWeight:600,cursor:"pointer"}}>Usar foto</button>
+      </div>
+    </div>}
+  </>;
 }
 
 /* ── Main App ── */
