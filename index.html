@@ -848,6 +848,7 @@ function App(){
         if(!fdata.partnerIdNew)return next;
         return next.map(m=>m.id===fdata.partnerIdNew&&!m.partnerships.find(x=>x.partnerId===targetId)?{...m,partnerships:[...m.partnerships,{partnerId:targetId,type:"actual"}]}:m);
       });
+      if(!familyRoot)saveRoot(targetId);
     } else {
       update(p=>p.map(m=>{
         if(m.id===sel){
@@ -1276,6 +1277,7 @@ function App(){
           <option value="">Selecciona tu nombre...</option>
           {[...members].sort((a,b)=>getDisplay(a).full.localeCompare(getDisplay(b).full)).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
         </Sel>
+        <button onClick={()=>{setShowRootModal(false);openAdd();}} style={{padding:"12px 0",background:"transparent",border:"1px solid rgba(60,60,67,0.25)",borderRadius:12,color:"rgba(60,60,67,0.7)",fontSize:15,fontWeight:500,cursor:"pointer"}}>✨ Registrarme</button>
         <button onClick={()=>{if(rootSelect)saveRoot(rootSelect);}} disabled={!rootSelect} style={{padding:"14px 0",background:rootSelect?"#007AFF":"rgba(120,120,128,0.12)",border:"none",borderRadius:12,color:rootSelect?"#fff":"#999",fontSize:17,fontWeight:600,cursor:rootSelect?"pointer":"default"}}>Continuar</button>
         {familyRoot&&<button onClick={()=>setShowRootModal(false)} style={{padding:"10px 0",background:"none",border:"none",color:"#007AFF",fontSize:15,cursor:"pointer"}}>Cancelar</button>}
       </div>
