@@ -543,7 +543,6 @@ const CAL_DAYS=["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
 function CalendarView({members,onTapPerson}){
   const [cal,setCal]=useState(()=>{const d=new Date();return{y:d.getFullYear(),m:d.getMonth()};});
   const [daySheet,setDaySheet]=useState(null);
-  const swipeRef=useRef({});
   const {y,m}=cal;
 
   // Build day→events map for current month
@@ -574,15 +573,7 @@ function CalendarView({members,onTapPerson}){
   const prev=()=>setCal(c=>c.m===0?{y:c.y-1,m:11}:{y:c.y,m:c.m-1});
   const next=()=>setCal(c=>c.m===11?{y:c.y+1,m:0}:{y:c.y,m:c.m+1});
 
-  const onTS=e=>{swipeRef.current={x:e.touches[0].clientX};};
-  const onTE=e=>{
-    const dx=e.changedTouches[0].clientX-(swipeRef.current.x??0);
-    if(Math.abs(dx)>50){dx<0?next():prev();}
-    swipeRef.current={};
-  };
-
-  return <div style={{flex:1,overflow:"auto",background:"#F2F2F7",display:"flex",flexDirection:"column"}}
-    onTouchStart={onTS} onTouchEnd={onTE}>
+  return <div style={{flex:1,overflow:"auto",background:"#F2F2F7",display:"flex",flexDirection:"column"}}>
     <div style={{position:"sticky",top:0,zIndex:10,flexShrink:0}}>
     {/* Month nav */}
     <div style={{background:"linear-gradient(135deg,#007AFF,#5AC8FA)",padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
