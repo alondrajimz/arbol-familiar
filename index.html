@@ -151,16 +151,24 @@ function autoLayout(members){
     // For each family, build couple/single units
     function buildUnits(fam){
       const done=new Set();const units=[];
+      // Pass 1: pair up casado couples only
       fam.forEach(x=>{
-        if(done.has(x.id))return;done.add(x.id);
-        const pr=parsePartners(x.partnerships).sort((a,b)=>(a.type==="casado"?0:1)-(b.type==="casado"?0:1)).find(p=>byId[p.partnerId]&&gen[p.partnerId]===g&&!done.has(p.partnerId));
+        if(done.has(x.id))return;
+        const pr=parsePartners(x.partnerships)
+          .filter(p=>p.type==="casado")
+          .find(p=>byId[p.partnerId]&&gen[p.partnerId]===g&&!done.has(p.partnerId));
         if(pr){
-          const pm=byId[pr.partnerId];done.add(pm.id);
+          done.add(x.id);done.add(pr.partnerId);
+          const pm=byId[pr.partnerId];
           const mLeft=x.gender==="M"||(x.gender!=="F"&&pm.gender==="F");
           units.push({couple:true,ids:mLeft?[x.id,pm.id]:[pm.id,x.id]});
-        } else {
-          units.push({couple:false,ids:[x.id]});
         }
+      });
+      // Pass 2: divorced, widowed, and singles placed individually
+      fam.forEach(x=>{
+        if(done.has(x.id))return;
+        done.add(x.id);
+        units.push({couple:false,ids:[x.id]});
       });
       return units;
     }
