@@ -86,7 +86,7 @@ function autoLayout(members){
       const xP=!!(x.parent1Id||x.parent2Id);
       const pP=!!(byId[pr.partnerId]?.parent1Id||byId[pr.partnerId]?.parent2Id);
       const g=(!xP&&pP)?gen[pr.partnerId]:(xP&&!pP)?gen[x.id]:Math.min(gen[x.id],gen[pr.partnerId]);
-      if(x.firstName==="Alejandro"||x.firstName==="Eva Judith")console.log("PAREJA:",x.firstName,"gen",gen[x.id],"→",g,"partner:",byId[pr.partnerId]?.firstName,"gen",gen[pr.partnerId],"xHasP:",xP,"partnerHasP:",pP);
+      if(x.firstName?.includes("Alejandro")||x.firstName?.includes("Eva")||byId[pr.partnerId]?.firstName?.includes("Alejandro")||byId[pr.partnerId]?.firstName?.includes("Eva"))console.log("PAREJA:",x.firstName,"gen[x]=",gen[x.id],"→ g=",g,"partner:",byId[pr.partnerId]?.firstName,"gen[p]=",gen[pr.partnerId],"xHasP:",xP,"pHasP:",pP);
       if(gen[x.id]!==g){gen[x.id]=g;chg=true;coupleForced.add(x.id);}
       if(gen[pr.partnerId]!==g){gen[pr.partnerId]=g;chg=true;coupleForced.add(pr.partnerId);}
     }));
