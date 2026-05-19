@@ -1237,7 +1237,6 @@ function App(){
     });
     return families.sort((a,b)=>a.name.localeCompare(b.name));
   }
-  console.log("Families:",getFamilies());
   function getDescendants(id){const kids=members.filter(m=>m.parent1Id===id||m.parent2Id===id).map(m=>m.id);return kids.flatMap(kid=>[kid,...getDescendants(kid)]);}
   const displayedMembers=familyView==="general"?members:(()=>{
     const fam=getFamilies().find(f=>f.id===familyView);
