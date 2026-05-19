@@ -31,7 +31,6 @@ input,select,button{font-family:inherit}
 @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 @keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 @keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}
-#debug{position:fixed;top:60px;right:10px;width:300px;max-height:400px;overflow:auto;background:rgba(0,0,0,0.9);color:#0f0;font:10px monospace;padding:10px;z-index:9999;pointer-events:none}
 .person-card{width:150px;min-height:100px;box-sizing:border-box}
 </style>
 </head>
@@ -62,7 +61,6 @@ const dateInputSupported=(()=>{try{const i=document.createElement("input");i.set
 /* ── LAYOUT ALGORITHM ── */
 function autoLayout(members){
   try{
-  const _dbg=document.getElementById("debug");if(_dbg)_dbg.innerHTML="";
   if(!members.length)return members;
   const m=members.map(x=>({...x}));
   const byId=Object.fromEntries(m.map(x=>[x.id,x]));
@@ -83,15 +81,12 @@ function autoLayout(members){
   const coupleForced=new Set();
   while(chg&&it++<100){
     chg=false;
-    // Partners → same gen (priority: if one has parents, other adopts that gen)
+    // Partners → same gen (always use the deeper/higher gen of the two)
     m.forEach(x=>parsePartners(x.partnerships).forEach(pr=>{
-      if(gen[pr.partnerId]==null)return;
-      const xP=!!(x.parent1Id||x.parent2Id);
-      const pP=!!(byId[pr.partnerId]?.parent1Id||byId[pr.partnerId]?.parent2Id);
-      const g=(!xP&&pP)?gen[pr.partnerId]:(xP&&!pP)?gen[x.id]:Math.min(gen[x.id],gen[pr.partnerId]);
-      if(x.firstName?.includes("Alejandro")||x.firstName?.includes("Eva")||byId[pr.partnerId]?.firstName?.includes("Alejandro")||byId[pr.partnerId]?.firstName?.includes("Eva")){const _d=document.getElementById("debug");if(_d)_d.innerHTML+="<div>PAREJA: "+x.firstName+" gen[x]="+gen[x.id]+" → g="+g+" partner: "+byId[pr.partnerId]?.firstName+" gen[p]="+gen[pr.partnerId]+" xHasP:"+xP+" pHasP:"+pP+"</div>";}
-      if(gen[x.id]!==g){gen[x.id]=g;chg=true;coupleForced.add(x.id);}
-      if(gen[pr.partnerId]!==g){gen[pr.partnerId]=g;chg=true;coupleForced.add(pr.partnerId);}
+      const p=byId[pr.partnerId];if(!p||gen[p.id]==null)return;
+      const targetGen=Math.max(gen[x.id],gen[p.id]);
+      if(gen[x.id]!==targetGen){gen[x.id]=targetGen;chg=true;coupleForced.add(x.id);}
+      if(gen[p.id]!==targetGen){gen[p.id]=targetGen;chg=true;coupleForced.add(p.id);}
     }));
     // Siblings → same gen (max = deepest sibling's row, keeps all on one row)
     const sibs={};
@@ -159,7 +154,6 @@ function autoLayout(members){
           units.push({couple:false,ids:[x.id]});
         }
       });
-      {const _d=document.getElementById("debug");if(_d)_d.innerHTML+="<div>GEN "+g+" UNITS: "+units.map(u=>(u.couple?"C":"S")+":"+u.ids.map(id=>byId[id]?.firstName).join("+")).join(", ")+"</div>";}
       return units;
     }
 
@@ -878,7 +872,6 @@ function App(){
         {familyRoot&&<button onClick={()=>setShowRootModal(false)} style={{padding:"10px 0",background:"none",border:"none",color:"#007AFF",fontSize:15,cursor:"pointer"}}>Cancelar</button>}
       </div>
     </div>}
-    <div id="debug"></div>
   </div>;
 }
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
