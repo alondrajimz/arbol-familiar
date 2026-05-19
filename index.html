@@ -1060,6 +1060,7 @@ function App(){
       <Inp value={form.lastName1} onChange={e=>setForm({...form,lastName1:e.target.value})} placeholder="Apellido paterno"/>
       <Inp value={form.lastName2} onChange={e=>setForm({...form,lastName2:e.target.value})} placeholder="Apellido materno"/>
       <SecTitle>Nacimiento</SecTitle>
+      <div style={{color:"rgba(60,60,67,0.6)",fontSize:12,padding:"6px 14px 2px"}}>Fecha de nacimiento</div>
       <Inp type="date" value={form.birthDate} onChange={e=>setForm({...form,birthDate:e.target.value})}/>
       <Inp value={form.birthPlace} onChange={e=>setForm({...form,birthPlace:e.target.value})} placeholder="Lugar de nacimiento"/>
       <SecTitle>Residencia</SecTitle>
@@ -1071,6 +1072,7 @@ function App(){
       <Inp value={form.instagram} onChange={e=>setForm({...form,instagram:e.target.value})} placeholder="Instagram (URL o usuario)"/>
       <Toggle value={form.deceased||false} onChange={v=>setForm({...form,deceased:v})} labelA="Vivo/a" labelB="Fallecido/a"/>
       {form.deceased&&<><SecTitle>Fallecimiento</SecTitle>
+        <div style={{color:"rgba(60,60,67,0.6)",fontSize:12,padding:"6px 14px 2px"}}>Fecha de fallecimiento</div>
         <Inp type="date" value={form.deathDate} onChange={e=>setForm({...form,deathDate:e.target.value})}/>
         <Inp value={form.deathPlace} onChange={e=>setForm({...form,deathPlace:e.target.value})} placeholder="Lugar donde descansan sus restos"/>
       </>}
