@@ -540,14 +540,14 @@ function AddPhotoModal({memberId,members,onDone,onClose}){
   </div>;
 }
 
-function PhotoViewModal({photos,initIdx,members,onClose,onUpdateTags,onDelete,onTapPerson}){
+function PhotoViewModal({photos,initIdx,members,onClose,onUpdateTags,onDelete}){
   const [idx,setIdx]=useState(initIdx);
   const [editingTags,setEditingTags]=useState(false);
   const [tags,setTags]=useState([]);
   useEffect(()=>{setTags(photos[idx]?.tags||[]);setEditingTags(false);},[idx]);
   const photo=photos[idx];if(!photo)return null;
   const toggleTag=id=>setTags(t=>t.includes(id)?t.filter(x=>x!==id):[...t,id]);
-  const taggedMembers=(photo.tags||[]).map(id=>members.find(m=>m.id===id)).filter(Boolean);
+  const tagNames=(photo.tags||[]).map(id=>members.find(m=>m.id===id)).filter(Boolean).map(m=>getDisplay(m).full).join(", ");
   const handleDelete=()=>{if(confirm("¿Eliminar esta foto?"))onDelete(photo);};
   return <div style={{position:"fixed",inset:0,background:"#fff",zIndex:350,display:"flex",flexDirection:"column"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",flexShrink:0,borderBottom:"0.5px solid rgba(60,60,67,0.1)"}}>
@@ -574,16 +574,7 @@ function PhotoViewModal({photos,initIdx,members,onClose,onUpdateTags,onDelete,on
         </div>
         <button onClick={()=>{onUpdateTags(photo,tags);setEditingTags(false);}} style={{padding:"10px 20px",borderRadius:12,border:"none",background:"#34C759",color:"#fff",fontSize:14,fontWeight:600,cursor:"pointer"}}>Guardar</button>
       </>:
-        {taggedMembers.length>0
-          ?<div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {taggedMembers.map(m=>(
-              <button key={m.id} onClick={()=>{onClose();onTapPerson(m.id);}} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px 5px 5px",borderRadius:100,border:"none",background:"rgba(0,122,255,0.1)",cursor:"pointer"}}>
-                <Avatar photo={m.photo} name={getDisplay(m).full} size={22} gender={m.gender} deceased={m.deceased}/>
-                <span style={{fontSize:13,color:"#007AFF",fontWeight:500}}>{getDisplay(m).first}</span>
-              </button>
-            ))}
-          </div>
-          :<div style={{color:"rgba(60,60,67,0.5)",fontSize:13}}>Sin etiquetas</div>}
+        <div style={{color:"rgba(60,60,67,0.6)",fontSize:13}}>{tagNames||"Sin etiquetas"}</div>
       }
     </div>
   </div>;
@@ -612,9 +603,14 @@ function PhotosTimeline({members,onTapPhoto}){
           style={{breakInside:"avoid",marginBottom:4,cursor:"pointer",borderRadius:10,overflow:"hidden",background:"#fff"}}>
           <img src={photo.url} style={{width:"100%",display:"block"}}/>
           {photo.captureDate&&<div style={{padding:"4px 8px 2px",fontSize:11,color:"#888"}}>{fmtCaptureDate(photo.captureDate)}</div>}
-          {tagged.length>0&&<div style={{padding:"2px 8px 6px",fontSize:11,color:"#888"}}>
-              {tagged.map(m=>getDisplay(m).first).join(", ")}
-            </div>}
+          {tagged.length>0&&<div style={{padding:"2px 8px 6px",display:"flex",flexWrap:"wrap",gap:4}}>
+            {tagged.map(m=>(
+              <div key={m.id} style={{display:"flex",alignItems:"center",gap:3,background:"rgba(0,122,255,0.08)",borderRadius:100,padding:"2px 7px"}}>
+                <Avatar photo={m.photo} name={getDisplay(m).full} size={16} gender={m.gender} deceased={m.deceased}/>
+                <span style={{fontSize:11,color:"#007AFF"}}>{getDisplay(m).first}</span>
+              </div>
+            ))}
+          </div>}
         </div>;
       })}
     </div>
@@ -1361,7 +1357,6 @@ function App(){
       onClose={()=>setPhotoView(null)}
       onUpdateTags={(photo,tags)=>{updatePhotoTags(photo,tags);flash("Tags actualizados ✓");}}
       onDelete={photo=>{deletePhoto(photo);flash("Foto eliminada ✓");}}
-      onTapPerson={id=>{setPhotoView(null);tapCard(id);}}
     />}
 
     {/* History trigger */}
