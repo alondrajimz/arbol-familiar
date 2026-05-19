@@ -294,9 +294,12 @@ function PersonNode({m,onTap}){
   return (
     <foreignObject key={m.id} x={m.x-75} y={m.y-55} width={150} height={130}>
       <div className="person-card" onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden"}}>
-        <Avatar photo={m.photo} name={d.full} size={70} gender={m.gender} deceased={m.deceased}/>
+        <div style={{position:"relative",display:"inline-block"}}>
+          <Avatar photo={m.photo} name={d.full} size={70} gender={m.gender} deceased={m.deceased}/>
+          {m.deceased&&<span style={{position:"absolute",top:0,right:0,fontSize:12,color:"#888"}}>†</span>}
+        </div>
         <div style={{marginTop:4,fontSize:14,fontWeight:700,color:m.deceased?"#888":"#000",height:18,...txt}}>
-          {m.deceased?"† ":""}{d.first}
+          {d.first}
         </div>
         <div style={{fontSize:11,color:"#666",height:16,...txt}}>{d.last||""}</div>
         <div style={{fontSize:11,color:"#999",height:16}}>{age!==null?`${age} años`:""}</div>
