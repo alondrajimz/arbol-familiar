@@ -1240,16 +1240,19 @@ function App(){
     const byId=Object.fromEntries(members.map(x=>[x.id,x]));
     const families=[];
     const processed=new Set();
-    members.filter(m=>parsePartners(m.partnerships).some(p=>p.type==="actual")).forEach(m=>{
-      if(processed.has(m.id))return;
-      const partner=parsePartners(m.partnerships).find(p=>p.type==="actual"&&byId[p.partnerId]);
-      if(!partner)return;
-      const pm=byId[partner.partnerId];
-      const hasKids=members.some(c=>c.parent1Id===m.id||c.parent2Id===m.id||c.parent1Id===pm.id||c.parent2Id===pm.id);
-      if(!hasKids)return;
-      processed.add(m.id);processed.add(pm.id);
-      const male=m.gender==="M"?m:pm;const female=m.gender==="F"?m:pm;
-      families.push({id:m.id+"-"+pm.id,name:(male.lastName1||"")+" "+(female.lastName1||""),founderId1:m.id,founderId2:pm.id});
+    members.forEach(m=>{
+      parsePartners(m.partnerships).forEach(pr=>{
+        const pm=byId[pr.partnerId];
+        if(!pm||processed.has(m.id+"-"+pm.id)||processed.has(pm.id+"-"+m.id))return;
+        const hasKids=members.some(c=>(c.parent1Id===m.id&&c.parent2Id===pm.id)||(c.parent1Id===pm.id&&c.parent2Id===m.id));
+        if(!hasKids)return;
+        const allIds=new Set([m.id,pm.id]);
+        members.forEach(c=>{if((c.parent1Id===m.id&&c.parent2Id===pm.id)||(c.parent1Id===pm.id&&c.parent2Id===m.id))allIds.add(c.id);});
+        if(allIds.size<3)return;
+        processed.add(m.id+"-"+pm.id);processed.add(pm.id+"-"+m.id);
+        const male=m.gender==="M"?m:pm;const female=m.gender==="F"?m:pm;
+        families.push({id:m.id+"-"+pm.id,name:(male.lastName1||"")+" "+(female.lastName1||""),founderId1:m.id,founderId2:pm.id,partnershipType:pr.type});
+      });
     });
     return families.sort((a,b)=>a.name.localeCompare(b.name));
   }
