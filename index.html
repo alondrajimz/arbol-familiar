@@ -1223,9 +1223,9 @@ function App(){
       <SecTitle>Residencia</SecTitle>
       <Inp value={form.residence} onChange={e=>setForm({...form,residence:e.target.value})} placeholder="Lugar de residencia actual"/>
       <SecTitle>Contacto</SecTitle>
-      <div style={{display:"flex",alignItems:"center",borderBottom:"0.5px solid rgba(60,60,67,0.12)"}}>
-        <div style={{flex:1}}><Inp type="tel" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="Teléfono"/></div>
-        {"contacts" in navigator&&<button onClick={async()=>{try{const c=await navigator.contacts.select(["tel"],{multiple:false});if(c[0]?.tel?.[0])setForm(f=>({...f,phone:c[0].tel[0]}));}catch(e){alert("No se pudo acceder a contactos. Verifica permisos.");}}} style={{flexShrink:0,margin:"0 10px",padding:"5px 10px",borderRadius:100,border:"none",background:"#007AFF",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>📱 Contactos</button>}
+      <div style={{position:"relative"}}>
+        <Inp type="tel" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="Teléfono"/>
+        {/Mobi|Android/i.test(navigator.userAgent)&&<button onClick={async()=>{if(navigator.contacts){try{const c=await navigator.contacts.select(["tel"]);if(c[0]?.tel?.[0])setForm(f=>({...f,phone:c[0].tel[0]}));}catch(e){}}else alert("Acceso a contactos no disponible en este navegador");}} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:20,cursor:"pointer",lineHeight:1}}>📱</button>}
       </div>
       <Inp type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="Correo electrónico"/>
       <Inp value={form.facebook} onChange={e=>setForm({...form,facebook:e.target.value})} placeholder="Facebook (URL o usuario)"/>
