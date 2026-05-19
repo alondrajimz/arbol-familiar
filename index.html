@@ -491,6 +491,7 @@ function App(){
   const familyRootRef=useRef(localStorage.getItem("familyRoot"));
   const isLocal=useRef(false);
   const autoSaveTimer=useRef(null);
+  const touchRef=useRef({});
   const canvasRef=useRef(null);
 
   const flash=msg=>{setToast(msg);setTimeout(()=>setToast(null),2000);};
@@ -706,7 +707,40 @@ function App(){
 
     {/* Canvas */}
     <div ref={canvasRef} style={{flex:1,overflow:"auto",background:"#F2F2F7"}}>
-      <svg width={svgW*zoom} height={svgH*zoom} style={{display:"block"}}>
+      <svg width={svgW*zoom} height={svgH*zoom} style={{display:"block",touchAction:"none"}}
+        onTouchStart={e=>{
+          if(e.touches.length===2){
+            const t=touchRef.current;
+            t.pinching=true;t.panning=false;
+            t.initDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+            t.initZoom=zoom;
+          } else if(e.touches.length===1){
+            const t=touchRef.current;
+            t.panning=true;t.pinching=false;
+            t.startX=e.touches[0].clientX;t.startY=e.touches[0].clientY;
+            t.scrollLeft=canvasRef.current.scrollLeft;t.scrollTop=canvasRef.current.scrollTop;
+          }
+        }}
+        onTouchMove={e=>{
+          e.preventDefault();
+          const t=touchRef.current;
+          if(t.pinching&&e.touches.length===2){
+            const dist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+            const next=Math.min(2.5,Math.max(0.2,t.initZoom*(dist/t.initDist)));
+            setZoom(next);
+          } else if(t.panning&&e.touches.length===1){
+            const dx=e.touches[0].clientX-t.startX;
+            const dy=e.touches[0].clientY-t.startY;
+            canvasRef.current.scrollLeft=t.scrollLeft-dx;
+            canvasRef.current.scrollTop=t.scrollTop-dy;
+          }
+        }}
+        onTouchEnd={e=>{
+          if(e.touches.length===0)touchRef.current={};
+          else if(e.touches.length===1&&touchRef.current.pinching){
+            touchRef.current={panning:true,pinching:false,startX:e.touches[0].clientX,startY:e.touches[0].clientY,scrollLeft:canvasRef.current.scrollLeft,scrollTop:canvasRef.current.scrollTop};
+          }
+        }}>
         <g transform={`scale(${zoom})`}>
           <TreeLines members={members}/>
           {members.map(m=><PersonNode key={m.id} m={m} onTap={tapCard}/>)}
