@@ -1447,8 +1447,21 @@ function App(){
         <option value="">— Ninguno —</option>
         {members.filter(m=>m.id!==sel).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
       </Sel>
+      {(form.partnerships||[]).length>0&&<>
+        <div style={{fontSize:12,color:"rgba(60,60,67,0.6)",padding:"6px 14px 4px",fontWeight:500}}>Parejas registradas:</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,padding:"0 14px 8px"}}>{(form.partnerships||[]).map(pr=>{
+          const p=members.find(m=>m.id===pr.partnerId);if(!p)return null;
+          const prColors={casado:"#34C759",divorciado:"#FF9500",viudo:"#3a3a3c"};
+          const prLabels={casado:"Casado/a",divorciado:"Divorciado/a",viudo:"Viudo/a"};
+          return <div key={pr.partnerId} onClick={()=>{setSel(pr.partnerId);setPanel("view");}} style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"0.5px solid rgba(60,60,67,0.2)",borderRadius:100,padding:"4px 10px 4px 4px",cursor:"pointer"}}>
+            <Avatar photo={p.photo} name={getDisplay(p).full} size={30} gender={p.gender}/>
+            <span style={{fontSize:13,fontWeight:500}}>{getDisplay(p).full}</span>
+            <span style={{fontSize:11,color:prColors[pr.type]||"#888",fontWeight:600,background:`${prColors[pr.type]||"#888"}22`,borderRadius:8,padding:"1px 6px"}}>{prLabels[pr.type]||pr.type}</span>
+          </div>;
+        })}</div>
+      </>}
       <SecTitle>Hijos</SecTitle>
-      {(form.hijos||[]).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,padding:"0 14px 8px"}}>{(form.hijos||[]).map(id=>{const p=members.find(m=>m.id===id);if(!p)return null;return <div key={id} style={{display:"flex",alignItems:"center",gap:4,background:"rgba(120,120,128,0.12)",borderRadius:100,padding:"4px 10px",fontSize:13}}><span>{getDisplay(p).full}</span><span onClick={()=>setForm({...form,hijos:(form.hijos||[]).filter(x=>x!==id)})} style={{cursor:"pointer",color:"#FF3B30",fontWeight:700,marginLeft:2}}>×</span></div>;})}</div>}
+      {(form.hijos||[]).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,padding:"0 14px 8px"}}>{(form.hijos||[]).map(id=>{const p=members.find(m=>m.id===id);if(!p)return null;return <div key={id} style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"0.5px solid rgba(60,60,67,0.2)",borderRadius:100,padding:"4px 10px 4px 4px"}}><div onClick={()=>{setSel(id);setPanel("view");}} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><Avatar photo={p.photo} name={getDisplay(p).full} size={30} gender={p.gender}/><span style={{fontSize:13}}>{getDisplay(p).full}</span></div><span onClick={()=>setForm({...form,hijos:(form.hijos||[]).filter(x=>x!==id)})} style={{cursor:"pointer",color:"#FF3B30",fontWeight:700,marginLeft:2}}>×</span></div>;})}</div>}
       <Sel value="" onChange={e=>{const id=e.target.value;if(id)setForm({...form,hijos:[...(form.hijos||[]),id]});}}>
         <option value="">— Agregar hijo/a —</option>
         {members.filter(m=>{
