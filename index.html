@@ -531,6 +531,99 @@ function PhotoViewModal({photos,initIdx,members,onClose,onUpdateTags}){
   </div>;
 }
 
+/* ── Calendar ── */
+const CAL_MONTHS=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const CAL_DAYS=["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+
+function CalendarView({members,onTapPerson}){
+  const [cal,setCal]=useState(()=>{const d=new Date();return{y:d.getFullYear(),m:d.getMonth()};});
+  const [daySheet,setDaySheet]=useState(null);
+  const {y,m}=cal;
+
+  // Build day→events map for current month
+  const evMap={};
+  members.forEach(mem=>{
+    const addEv=(dateStr,type)=>{
+      if(!dateStr)return;
+      const p=dateStr.split("-");if(p.length<3)return;
+      const em=parseInt(p[1])-1,ed=parseInt(p[2]),ey=parseInt(p[0]);
+      if(em!==m)return;
+      if(!evMap[ed])evMap[ed]=[];
+      evMap[ed].push({member:mem,type,years:y-ey});
+    };
+    addEv(mem.birthDate,"birthday");
+    if(mem.deceased)addEv(mem.deathDate,"death");
+  });
+
+  const firstDow=new Date(y,m,1).getDay();
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const today=new Date();
+  const isToday=d=>today.getFullYear()===y&&today.getMonth()===m&&today.getDate()===d;
+
+  const cells=[];
+  for(let i=0;i<firstDow;i++)cells.push(null);
+  for(let d=1;d<=daysInMonth;d++)cells.push(d);
+  while(cells.length%7!==0)cells.push(null);
+
+  const prev=()=>setCal(c=>c.m===0?{y:c.y-1,m:11}:{y:c.y,m:c.m-1});
+  const next=()=>setCal(c=>c.m===11?{y:c.y+1,m:0}:{y:c.y,m:c.m+1});
+
+  return <div style={{flex:1,overflow:"auto",background:"#F2F2F7",display:"flex",flexDirection:"column"}}>
+    {/* Month nav */}
+    <div style={{background:"linear-gradient(135deg,#007AFF,#5AC8FA)",padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+      <button onClick={prev} style={{background:"none",border:"none",color:"#fff",fontSize:26,cursor:"pointer",lineHeight:1,padding:"0 8px"}}>←</button>
+      <span style={{color:"#fff",fontSize:18,fontWeight:700}}>{CAL_MONTHS[m]} {y}</span>
+      <button onClick={next} style={{background:"none",border:"none",color:"#fff",fontSize:26,cursor:"pointer",lineHeight:1,padding:"0 8px"}}>→</button>
+    </div>
+    {/* Day headers */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",background:"#fff",borderBottom:"0.5px solid rgba(60,60,67,0.1)",flexShrink:0}}>
+      {CAL_DAYS.map(d=><div key={d} style={{textAlign:"center",padding:"6px 0",fontSize:11,fontWeight:600,color:"rgba(60,60,67,0.45)"}}>{d}</div>)}
+    </div>
+    {/* Grid */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,padding:4,flex:1}}>
+      {cells.map((day,i)=>{
+        if(!day)return <div key={`x${i}`}/>;
+        const evs=evMap[day]||[];
+        const hit=evs.length>0;
+        return <div key={day} onClick={hit?()=>setDaySheet(evs):undefined}
+          style={{background:"#fff",borderRadius:10,padding:"4px 3px",minHeight:72,cursor:hit?"pointer":"default",
+            border:isToday(day)?"2px solid #007AFF":"2px solid transparent",boxSizing:"border-box"}}>
+          <div style={{fontSize:12,fontWeight:isToday(day)?700:400,color:isToday(day)?"#007AFF":"#1c1c1e",marginBottom:2}}>{day}</div>
+          {evs.slice(0,2).map((ev,ei)=><div key={ei} style={{display:"flex",alignItems:"center",gap:2,marginBottom:1}}>
+            <span style={{fontSize:10,lineHeight:1}}>{ev.type==="birthday"?"🎉":"🕊️"}</span>
+            <Avatar photo={ev.member.photo} name={getDisplay(ev.member).full} size={26} gender={ev.member.gender} deceased={ev.member.deceased}/>
+          </div>)}
+          {evs.length>2&&<div style={{fontSize:9,color:"#007AFF",marginTop:1}}>+{evs.length-2}</div>}
+        </div>;
+      })}
+    </div>
+    {/* Day bottom sheet */}
+    {daySheet&&<>
+      <div onClick={()=>setDaySheet(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:50}}/>
+      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:60,background:"#F2F2F7",borderRadius:"14px 14px 0 0",maxHeight:"70vh",overflowY:"auto",paddingBottom:"env(safe-area-inset-bottom,20px)",animation:"sheetUp .3s ease-out"}}>
+        <div style={{display:"flex",justifyContent:"center",padding:"10px 0 2px"}}><div style={{width:36,height:5,borderRadius:3,background:"rgba(60,60,67,0.15)"}}/></div>
+        <div style={{display:"flex",justifyContent:"space-between",padding:"6px 20px 10px"}}>
+          <button onClick={()=>setDaySheet(null)} style={{background:"none",border:"none",color:"#007AFF",fontSize:17,cursor:"pointer"}}>Cerrar</button>
+          <span style={{fontSize:17,fontWeight:600}}>Eventos</span>
+          <div style={{width:50}}/>
+        </div>
+        <div style={{padding:"0 16px 24px",display:"flex",flexDirection:"column",gap:10}}>
+          {daySheet.map((ev,i)=>(
+            <div key={i} onClick={()=>{onTapPerson(ev.member.id);setDaySheet(null);}} style={{background:"#fff",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"center",gap:14,cursor:"pointer"}}>
+              <Avatar photo={ev.member.photo} name={getDisplay(ev.member).full} size={54} gender={ev.member.gender} deceased={ev.member.deceased}/>
+              <div>
+                <div style={{fontWeight:600,fontSize:16}}>{getDisplay(ev.member).full}</div>
+                <div style={{fontSize:14,color:ev.type==="birthday"?"#FF9500":"#888",marginTop:2}}>{ev.type==="birthday"?"🎉 Cumpleaños":"🕊️ Aniversario"}</div>
+                <div style={{fontSize:12,color:"rgba(60,60,67,0.5)",marginTop:2}}>{ev.type==="birthday"?`${ev.years} años`:`${ev.years} años desde su partida`}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>}
+  </div>;
+}
+
 /* ── Main App ── */
 function getRelation(memberId,rootId,members){
   if(!rootId)return"distant";
@@ -585,6 +678,7 @@ function App(){
   const [showRootModal,setShowRootModal]=useState(()=>!localStorage.getItem("familyRoot"));
   const [rootSelect,setRootSelect]=useState(()=>localStorage.getItem("familyRoot")||"");
   const [showPersonas,setShowPersonas]=useState(false);
+  const [showCalendar,setShowCalendar]=useState(false);
   const [photoView,setPhotoView]=useState(null); // {photos,idx}
   const [addPhotoFor,setAddPhotoFor]=useState(null); // memberId
   const familyRootRef=useRef(localStorage.getItem("familyRoot"));
@@ -824,13 +918,16 @@ function App(){
       <div style={{display:"flex",gap:6,padding:"4px 16px 8px",overflowX:"auto",scrollbarWidth:"none",msOverflowStyle:"none",WebkitOverflowScrolling:"touch"}}>
         <style>{"._hbar::-webkit-scrollbar{display:none}"}</style>
         {[
-          {label:"+",onClick:()=>setZoom(z=>Math.min(z+0.15,2.5)),bg:"rgba(120,120,128,0.12)"},
-          {label:"−",onClick:()=>setZoom(z=>Math.max(z-0.15,0.2)),bg:"rgba(120,120,128,0.12)"},
-          {label:"Ajustar",onClick:fit,bg:"rgba(120,120,128,0.12)"},
+          ...(!showCalendar?[
+            {label:"+",onClick:()=>setZoom(z=>Math.min(z+0.15,2.5)),bg:"rgba(120,120,128,0.12)"},
+            {label:"−",onClick:()=>setZoom(z=>Math.max(z-0.15,0.2)),bg:"rgba(120,120,128,0.12)"},
+            {label:"Ajustar",onClick:fit,bg:"rgba(120,120,128,0.12)"},
+          ]:[]),
           {label:"👥",onClick:()=>setShowPersonas(true),bg:"rgba(120,120,128,0.12)"},
+          {label:"📅",onClick:()=>setShowCalendar(c=>!c),bg:showCalendar?"#007AFF":"rgba(120,120,128,0.12)",color:showCalendar?"#fff":undefined},
           {label:"Guardar",onClick:manualSave,bg:"#34C759",color:"#fff"},
           {label:"Agregar",onClick:openAdd,bg:"#007AFF",color:"#fff"},
-          ...(sel?[
+          ...(!showCalendar&&sel?[
             {label:"Editar",onClick:openEdit,bg:"#007AFF",color:"#fff"},
             {label:"Eliminar",onClick:removePerson,bg:"#FF3B30",color:"#fff"},
           ]:[]),
@@ -840,8 +937,9 @@ function App(){
       </div>
     </div>
 
-    {/* Canvas */}
-    <div ref={canvasRef} style={{flex:1,overflow:"auto",background:"#F2F2F7"}}>
+    {/* Calendar or Canvas */}
+    {showCalendar&&<CalendarView members={members} onTapPerson={id=>{setShowCalendar(false);tapCard(id);}}/>}
+    <div ref={canvasRef} style={{flex:1,overflow:"auto",background:"#F2F2F7",display:showCalendar?"none":"block"}}>
       <svg width={svgW*zoom} height={svgH*zoom} style={{display:"block",touchAction:"none"}}
         onTouchStart={e=>{
           if(e.touches.length===2){
