@@ -906,8 +906,30 @@ function App(){
       });
     }
     const logName=[fdata.firstName,fdata.lastName1,fdata.lastName2].filter(Boolean).join(" ");
-    if(panel==="add")pushLog(familyRoot,"create",targetId,logName,`Agregó a ${logName}`);
-    else pushLog(familyRoot,"edit",targetId,logName,`Editó a ${logName}`);
+    let logDetails;
+    if(panel==="add"){
+      logDetails=`Agregó a ${logName}`;
+    } else {
+      const prev=selM||{};
+      const changes=[];
+      if((fdata.birthDate||"")!==(prev.birthDate||""))
+        changes.push(`Cambió fecha de nacimiento de "${prev.birthDate||"?"}" a "${fdata.birthDate||"?"}"`);
+      if((fdata.phone||"")!==(prev.phone||""))
+        changes.push("Actualizó teléfono");
+      if(fdata.photo&&fdata.photo!==prev.photo&&!prev.photo)
+        changes.push("Agregó foto de perfil");
+      const prevHijoIds=members.filter(m=>m.parent1Id===sel||m.parent2Id===sel).map(m=>m.id);
+      (fdata.hijos||[]).filter(id=>!prevHijoIds.includes(id)).forEach(id=>{
+        const h=members.find(m=>m.id===id);
+        if(h)changes.push(`Agregó a ${getDisplay(h).full} como hijo`);
+      });
+      if(fdata.partnerIdNew){
+        const pm=members.find(m=>m.id===fdata.partnerIdNew);
+        if(pm)changes.push(`Agregó a ${getDisplay(pm).full} como pareja`);
+      }
+      logDetails=changes.length?changes.join("\n"):`Editó a ${logName}`;
+    }
+    pushLog(familyRoot,panel==="add"?"create":"edit",targetId,logName,logDetails);
     setPanel(null);
   };
 
@@ -1362,7 +1384,7 @@ function App(){
                 ?<Avatar photo={actor.photo} name={getDisplay(actor).full} size={36} gender={actor.gender} deceased={actor.deceased}/>
                 :<div style={{width:36,height:36,borderRadius:18,background:"rgba(120,120,128,0.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>👤</div>}
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{log.details}</div>
+                <div style={{fontSize:13,fontWeight:600,whiteSpace:"pre-line",lineHeight:1.4}}>{log.details}</div>
                 <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
                   <span style={{fontSize:11,color:"rgba(60,60,67,0.45)"}}>{timeAgo(log.timestamp)}</span>
                   {target&&<span style={{fontSize:11,background:"rgba(0,122,255,0.1)",color:"#007AFF",borderRadius:100,padding:"1px 7px"}}>{getDisplay(target).first}</span>}
