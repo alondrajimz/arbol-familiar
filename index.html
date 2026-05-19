@@ -333,8 +333,8 @@ function TreeLines({members}){
       const x1=Math.min(m.x,sp.x)+35,x2=Math.max(m.x,sp.x)-35;
       const y=(m.y+sp.y)/2-16;
       lines.push(<line key={`couple-${key}`} x1={x1} y1={y} x2={x2} y2={y}
-        stroke={pr.type==="anterior"?"#ccc":"#bbb"} strokeWidth={2}
-        strokeOpacity={1} strokeDasharray={pr.type==="anterior"?"5 4":"none"}/>);
+        stroke={pr.type!=="actual"?"#ccc":"#bbb"} strokeWidth={2}
+        strokeOpacity={1} strokeDasharray={pr.type!=="actual"?"5 4":"none"}/>);
     });
   });
 
@@ -896,6 +896,7 @@ function App(){
   const [panel,setPanel]=useState(null); // "view"|"edit"|"add"|"partners"
   const [form,setForm]=useState({});
   const [pForm,setPForm]=useState({partnerId:"",type:"actual"});
+  const [editPartner,setEditPartner]=useState(null); // {partnerId,type}
   const [toast,setToast]=useState(null);
   const [zoom,setZoom]=useState(1);
   const [loading,setLoading]=useState(true);
@@ -1090,6 +1091,15 @@ function App(){
       return m;
     }));
     setPForm({partnerId:"",type:"actual"});
+  };
+
+  const updatePartnerType=(partnerId,newType)=>{
+    update(p=>p.map(m=>{
+      if(m.id===sel)return{...m,partnerships:m.partnerships.map(x=>x.partnerId===partnerId?{...x,type:newType}:x)};
+      if(m.id===partnerId)return{...m,partnerships:m.partnerships.map(x=>x.partnerId===sel?{...x,type:newType}:x)};
+      return m;
+    }));
+    setEditPartner(null);
   };
 
   const removePartner=pid=>{
@@ -1339,7 +1349,7 @@ function App(){
               <Avatar photo={p.photo} name={getDisplay(p).full} size={40} gender={p.gender}/>
               <div style={{flex:1}}>
                 <div style={{fontWeight:600,fontSize:15}}>{getDisplay(p).full}</div>
-                <div style={{fontSize:12,color:pr.type==="actual"?"#34C759":"#888"}}>{pr.type==="actual"?"Pareja actual":"Ex pareja"}</div>
+                <div style={{fontSize:12,color:{actual:"#34C759",ex:"#888",divorciado:"#FF9500",viudo:"#3a3a3c"}[pr.type]||"#888"}}>{({actual:"Pareja actual",ex:"Ex pareja",divorciado:"Divorciado/a",viudo:"Viudo/a"})[pr.type]||"Ex pareja"}</div>
               </div>
             </div>;
           })}
@@ -1454,11 +1464,17 @@ function App(){
 
     {/* Partners */}
     {panel==="partners"&&selM&&sheet("Parejas de "+getDisplay(selM).first,close,<div style={{display:"flex",flexDirection:"column",gap:12}}>
-      {selM.partnerships.map(pr=>{const p=members.find(m=>m.id===pr.partnerId);if(!p)return null;
+      {selM.partnerships.map(pr=>{
+        const p=members.find(m=>m.id===pr.partnerId);if(!p)return null;
+        const prColors={actual:"#34C759",ex:"#888",divorciado:"#FF9500",viudo:"#3a3a3c"};
+        const prLabels={actual:"Pareja actual",ex:"Ex pareja",divorciado:"Divorciado/a",viudo:"Viudo/a"};
         return <div key={pr.partnerId} style={{background:"#fff",borderRadius:12,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div onClick={()=>setEditPartner({partnerId:pr.partnerId,type:pr.type})} style={{display:"flex",alignItems:"center",gap:10,flex:1,cursor:"pointer"}}>
             <Avatar photo={p.photo} name={getDisplay(p).full} size={40} gender={p.gender}/>
-            <div><div style={{fontWeight:600}}>{getDisplay(p).full}</div><div style={{fontSize:12,color:pr.type==="actual"?"#34C759":"#888"}}>{pr.type==="actual"?"Pareja actual":"Ex pareja"}</div></div>
+            <div>
+              <div style={{fontWeight:600}}>{getDisplay(p).full}</div>
+              <div style={{fontSize:12,color:prColors[pr.type]||"#888",fontWeight:500}}>{prLabels[pr.type]||"Ex pareja"}</div>
+            </div>
           </div>
           <button onClick={()=>removePartner(pr.partnerId)} style={{width:28,height:28,borderRadius:14,background:"rgba(120,120,128,0.12)",border:"none",color:"#FF3B30",fontSize:16,fontWeight:700,cursor:"pointer"}}>×</button>
         </div>;})}
@@ -1469,9 +1485,33 @@ function App(){
       </Sel>
       <Sel value={pForm.type} onChange={e=>setPForm({...pForm,type:e.target.value})}>
         <option value="actual">Pareja actual</option>
-        <option value="anterior">Ex pareja</option>
+        <option value="ex">Ex pareja</option>
+        <option value="divorciado">Divorciado/a</option>
+        <option value="viudo">Viudo/a</option>
       </Sel>
       <button onClick={addPartner} disabled={!pForm.partnerId} style={{width:"100%",padding:"12px 0",background:pForm.partnerId?"#007AFF":"rgba(120,120,128,0.12)",border:"none",borderRadius:12,color:pForm.partnerId?"#fff":"#999",fontSize:16,fontWeight:600,cursor:pForm.partnerId?"pointer":"default"}}>Agregar pareja</button>
+      {editPartner&&(()=>{
+        const ep=members.find(m=>m.id===editPartner.partnerId);if(!ep)return null;
+        const prColors={actual:"#34C759",ex:"#888",divorciado:"#FF9500",viudo:"#3a3a3c"};
+        const prLabels={actual:"Pareja actual",ex:"Ex pareja",divorciado:"Divorciado/a",viudo:"Viudo/a"};
+        const [epType,setEpType]=React.useState(editPartner.type);
+        return <>
+          <div onClick={()=>setEditPartner(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200}}/>
+          <div style={{position:"fixed",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:201,background:"#F2F2F7",borderRadius:16,padding:20,width:"min(320px,90vw)",display:"flex",flexDirection:"column",gap:12}}>
+            <div style={{fontSize:16,fontWeight:700,textAlign:"center"}}>{getDisplay(ep).full}</div>
+            <div style={{fontSize:13,color:"#888",textAlign:"center",marginTop:-6}}>Cambiar estado de relación</div>
+            {["actual","ex","divorciado","viudo"].map(t=>(
+              <button key={t} onClick={()=>setEpType(t)} style={{padding:"11px 14px",borderRadius:10,border:`2px solid ${epType===t?prColors[t]:"rgba(120,120,128,0.2)"}`,background:epType===t?"rgba(0,0,0,0.04)":"#fff",color:epType===t?prColors[t]:"#444",fontSize:15,fontWeight:epType===t?700:400,cursor:"pointer",textAlign:"left"}}>
+                <span style={{color:prColors[t],marginRight:8}}>●</span>{prLabels[t]}
+              </button>
+            ))}
+            <div style={{display:"flex",gap:10,marginTop:4}}>
+              <button onClick={()=>setEditPartner(null)} style={{flex:1,padding:"12px 0",borderRadius:10,border:"none",background:"rgba(120,120,128,0.12)",fontSize:15,cursor:"pointer"}}>Cancelar</button>
+              <button onClick={()=>updatePartnerType(editPartner.partnerId,epType)} style={{flex:1,padding:"12px 0",borderRadius:10,border:"none",background:"#007AFF",color:"#fff",fontSize:15,fontWeight:600,cursor:"pointer"}}>Guardar</button>
+            </div>
+          </div>
+        </>;
+      })()}
     </div>)}
 
     {/* Personas drawer */}
