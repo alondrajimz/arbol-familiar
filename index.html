@@ -1314,7 +1314,7 @@ function App(){
         <div style={{fontSize:20,fontWeight:700,textAlign:"center"}}>¿Quién eres?</div>
         <Sel value={rootSelect} onChange={e=>setRootSelect(e.target.value)}>
           <option value="">Selecciona tu nombre...</option>
-          {[...members].sort((a,b)=>getDisplay(a).full.localeCompare(getDisplay(b).full)).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
+          {[...members].filter(m=>!m.deceased).sort((a,b)=>getDisplay(a).full.localeCompare(getDisplay(b).full)).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
         </Sel>
         <button onClick={()=>{setShowRootModal(false);openAdd();}} style={{padding:"12px 0",background:"transparent",border:"1px solid rgba(60,60,67,0.25)",borderRadius:12,color:"rgba(60,60,67,0.7)",fontSize:15,fontWeight:500,cursor:"pointer"}}>✨ Registrarme</button>
         <button onClick={()=>{if(rootSelect)saveRoot(rootSelect);}} disabled={!rootSelect} style={{padding:"14px 0",background:rootSelect?"#007AFF":"rgba(120,120,128,0.12)",border:"none",borderRadius:12,color:rootSelect?"#fff":"#999",fontSize:17,fontWeight:600,cursor:rootSelect?"pointer":"default"}}>Continuar</button>
