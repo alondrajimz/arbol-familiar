@@ -771,10 +771,6 @@ function CalendarView({members,events,onTapPerson,onTapEvent}){
   for(let d=1;d<=daysInMonth;d++)cells.push(d);
   while(cells.length<42)cells.push(null);
 
-  const cellPx=Math.floor(window.innerWidth/7);
-  const av1=Math.max(28,Math.floor(cellPx*.65));
-  const av2=Math.max(20,Math.floor(cellPx*.43));
-  const av3=Math.max(16,Math.floor(cellPx*.29));
 
   const prev=()=>setCal(c=>c.m===0?{y:c.y-1,m:11}:{y:c.y,m:c.m-1});
   const next=()=>setCal(c=>c.m===11?{y:c.y+1,m:0}:{y:c.y,m:c.m+1});
@@ -800,31 +796,41 @@ function CalendarView({members,events,onTapPerson,onTapEvent}){
         const hit=evs.length>0;
         const memberEvs=evs.filter(e=>!e.isEvent);
         const famEvs=evs.filter(e=>e.isEvent);
-        const EvAvatar=({ev,size})=><div style={{position:"relative",display:"inline-block",textAlign:"center"}}>
-          <Avatar photo={ev.member.photo} name={getDisplay(ev.member).full} size={size} gender={ev.member.gender} deceased={ev.member.deceased}/>
-          <span style={{position:"absolute",top:-2,right:-2,fontSize:Math.max(10,size*.2),lineHeight:1}}>{ev.type==="birthday"?"🎉":"🕊️"}</span>
-        </div>;
+        const CellAvatar=({ev,w})=>{
+          const mem=ev.member;
+          const ini=(getDisplay(mem).full||"?").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase();
+          const isF=mem.gender==="F";const isDead=mem.deceased;
+          const grad=isDead?"linear-gradient(135deg,#666,#999)":(isF?"linear-gradient(135deg,#FF2D55,#FF6482)":"linear-gradient(135deg,#007AFF,#5AC8FA)");
+          const src=mem.photo?(isDead?mem.photo.replace("/upload/","/upload/e_grayscale/"):mem.photo):null;
+          const bdr=isDead?"2px solid #999":(isF?"2px solid #FF2D55":"2px solid #007AFF");
+          return <div style={{position:"relative",width:w,margin:"0 auto",flexShrink:0}}>
+            <div style={{width:"100%",paddingBottom:"100%",borderRadius:"50%",background:src?`url(${src}) center/cover no-repeat`:grad,border:bdr,boxSizing:"border-box",position:"relative",overflow:"hidden"}}>
+              {!src&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:600,fontSize:"clamp(7px,2.5vw,13px)"}}>{ini}</div>}
+            </div>
+            <span style={{position:"absolute",top:"-8%",right:"-8%",fontSize:"clamp(10px,3.5vw,18px)",lineHeight:1}}>{ev.type==="birthday"?"🎉":"🕊️"}</span>
+          </div>;
+        };
         let avatarBlock=null;
         if(memberEvs.length===1){
-          avatarBlock=<div style={{display:"flex",justifyContent:"center",alignItems:"center",flex:1}}><EvAvatar ev={memberEvs[0]} size={av1}/></div>;
+          avatarBlock=<div style={{display:"flex",justifyContent:"center",alignItems:"center",flex:1}}><CellAvatar ev={memberEvs[0]} w="70%"/></div>;
         } else if(memberEvs.length===2){
           avatarBlock=<div style={{display:"flex",flexDirection:"column",justifyContent:"space-evenly",alignItems:"center",flex:1}}>
-            {memberEvs.map((ev,ei)=><EvAvatar key={ei} ev={ev} size={av2}/>)}
+            {memberEvs.map((ev,ei)=><CellAvatar key={ei} ev={ev} w="45%"/>)}
           </div>;
         } else if(memberEvs.length>2){
           avatarBlock=<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:1,flex:1}}>
-            {memberEvs.slice(0,4).map((ev,ei)=><div key={ei} style={{display:"flex",justifyContent:"center",alignItems:"center"}}><EvAvatar ev={ev} size={av3}/></div>)}
-            {memberEvs.length>4&&<div style={{fontSize:8,color:"#007AFF",textAlign:"center",alignSelf:"center"}}>+{memberEvs.length-4}</div>}
+            {memberEvs.slice(0,4).map((ev,ei)=><div key={ei} style={{display:"flex",justifyContent:"center",alignItems:"center"}}><CellAvatar ev={ev} w="30%"/></div>)}
+            {memberEvs.length>4&&<div style={{fontSize:"clamp(7px,1.8vw,10px)",color:"#007AFF",textAlign:"center",alignSelf:"center"}}>+{memberEvs.length-4}</div>}
           </div>;
         }
         return <div key={day} onClick={hit?()=>setDaySheet(evs):undefined}
           style={{background:"#fff",borderRadius:0,padding:"3px",overflow:"hidden",cursor:hit?"pointer":"default",
             outline:isToday(day)?"2px solid #007AFF":"none",outlineOffset:"-2px",boxSizing:"border-box",display:"flex",flexDirection:"column"}}>
-          <div style={{fontSize:10,fontWeight:isToday(day)?700:400,color:isToday(day)?"#007AFF":"#1c1c1e",lineHeight:1,marginBottom:1,flexShrink:0}}>{day}</div>
+          <div style={{fontSize:"clamp(8px,2vw,12px)",fontWeight:isToday(day)?700:400,color:isToday(day)?"#007AFF":"#1c1c1e",lineHeight:1,marginBottom:1,flexShrink:0}}>{day}</div>
           {avatarBlock}
           {famEvs.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:1,justifyContent:"center",marginTop:1,flexShrink:0}}>
-            {famEvs.slice(0,2).map((e,i)=><span key={i} style={{fontSize:Math.max(10,av3*.6)}}>{EV_ICONS[e.type]||"🎊"}</span>)}
-            {famEvs.length>2&&<span style={{fontSize:8,color:"#007AFF"}}>+{famEvs.length-2}</span>}
+            {famEvs.slice(0,2).map((e,i)=><span key={i} style={{fontSize:"clamp(10px,3.5vw,18px)"}}>{EV_ICONS[e.type]||"🎊"}</span>)}
+            {famEvs.length>2&&<span style={{fontSize:"clamp(7px,1.8vw,10px)",color:"#007AFF"}}>+{famEvs.length-2}</span>}
           </div>}
         </div>;
       })}
