@@ -1445,13 +1445,7 @@ function App(){
       <SecTitle>Pareja</SecTitle>
       <Sel value={form.partnerIdNew||""} onChange={e=>setForm({...form,partnerIdNew:e.target.value})}>
         <option value="">— Ninguno —</option>
-        {members.filter(m=>{
-          if(m.id===sel)return false;
-          const actual=parsePartners(m.partnerships).find(x=>x.type==="actual");
-          if(actual&&actual.partnerId!==sel)return false;
-          if(m.birthDate){const age=calcAge(m.birthDate,null);if(age!==null&&age<18)return false;}
-          return true;
-        }).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
+        {members.filter(m=>m.id!==sel).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
       </Sel>
       <SecTitle>Hijos</SecTitle>
       {(form.hijos||[]).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,padding:"0 14px 8px"}}>{(form.hijos||[]).map(id=>{const p=members.find(m=>m.id===id);if(!p)return null;return <div key={id} style={{display:"flex",alignItems:"center",gap:4,background:"rgba(120,120,128,0.12)",borderRadius:100,padding:"4px 10px",fontSize:13}}><span>{getDisplay(p).full}</span><span onClick={()=>setForm({...form,hijos:(form.hijos||[]).filter(x=>x!==id)})} style={{cursor:"pointer",color:"#FF3B30",fontWeight:700,marginLeft:2}}>×</span></div>;})}</div>}
