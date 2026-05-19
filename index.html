@@ -1041,10 +1041,12 @@ function App(){
     } else {
       update(p=>p.map(m=>{
         if(m.id===sel){
-          const updated={...m,...fdata};
-          if(fdata.partnerIdNew&&!updated.partnerships.find(x=>x.partnerId===fdata.partnerIdNew))
-            updated.partnerships=[...updated.partnerships,{partnerId:fdata.partnerIdNew,type:"actual"}];
-          return updated;
+          // Use current partnerships from state (not stale form data) to preserve
+          // changes made via the Partners panel or editPartner modal during this session
+          const partnerships=[...m.partnerships];
+          if(fdata.partnerIdNew&&!partnerships.find(x=>x.partnerId===fdata.partnerIdNew))
+            partnerships.push({partnerId:fdata.partnerIdNew,type:"actual"});
+          return{...m,...fdata,partnerships};
         }
         if(fdata.partnerIdNew&&m.id===fdata.partnerIdNew&&!m.partnerships.find(x=>x.partnerId===sel))
           return{...m,partnerships:[...m.partnerships,{partnerId:sel,type:"actual"}]};
@@ -1070,6 +1072,13 @@ function App(){
         if(hijo.parent2Id===targetId)upd.parent2Id=null;
         if(Object.keys(upd).length)dbRef.child(hijoId).update(upd);
       });
+      // Bidirectional parent sync: if parent1Id/parent2Id changed, write immediately
+      const prev=members.find(m=>m.id===targetId);
+      if(prev){
+        const p1changed=(fdata.parent1Id||null)!==(prev.parent1Id||null);
+        const p2changed=(fdata.parent2Id||null)!==(prev.parent2Id||null);
+        if(p1changed||p2changed)dbRef.child(targetId).update({parent1Id:fdata.parent1Id||null,parent2Id:fdata.parent2Id||null});
+      }
     }
     const logName=[fdata.firstName,fdata.lastName1,fdata.lastName2].filter(Boolean).join(" ");
     let logDetails;
@@ -1275,7 +1284,22 @@ function App(){
   const close=()=>setPanel(null);
 
   return <div style={{width:"100%",height:"100vh",background:"#F2F2F7",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-    {toast&&<div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:200,background:"rgba(0,0,0,.75)",color:"#fff",padding:"10px 24px",borderRadius:100,fontSize:14,fontWeight:500,animation:"fadeIn .25s ease"}}>{toast}</div>}
+    {toast&&<div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:400,background:"rgba(0,0,0,.75)",color:"#fff",padding:"10px 24px",borderRadius:100,fontSize:14,fontWeight:500,animation:"fadeIn .25s ease"}}>{toast}</div>}
+
+    {/* Global editPartner modal — works from any panel */}
+    {editPartner&&(()=>{
+      const ep=members.find(m=>m.id===editPartner.partnerId);if(!ep)return null;
+      const st=editPartner.type;
+      return <>
+        <div onClick={()=>setEditPartner(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300}}/>
+        <div style={{position:"fixed",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:301,background:"#F2F2F7",borderRadius:16,padding:20,width:"min(300px,90vw)",display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{fontSize:15,fontWeight:700,textAlign:"center",marginBottom:2}}>{getDisplay(ep).full}</div>
+          <button onClick={()=>updatePartnerType(editPartner.partnerId,"actual")} style={{padding:"14px",borderRadius:10,border:`2px solid ${st==="actual"?"#34C759":"rgba(120,120,128,0.2)"}`,background:st==="actual"?"rgba(52,199,89,0.08)":"#fff",color:st==="actual"?"#34C759":"#444",fontSize:15,fontWeight:st==="actual"?700:400,cursor:"pointer",textAlign:"center"}}>✓ Pareja actual</button>
+          <button onClick={()=>updatePartnerType(editPartner.partnerId,"anterior")} style={{padding:"14px",borderRadius:10,border:`2px solid ${st==="anterior"?"#888":"rgba(120,120,128,0.2)"}`,background:st==="anterior"?"rgba(120,120,128,0.08)":"#fff",color:st==="anterior"?"#555":"#444",fontSize:15,fontWeight:st==="anterior"?700:400,cursor:"pointer",textAlign:"center"}}>Ex pareja</button>
+          <button onClick={()=>setEditPartner(null)} style={{padding:"12px",borderRadius:10,border:"none",background:"rgba(120,120,128,0.12)",fontSize:14,cursor:"pointer",marginTop:2}}>Cancelar</button>
+        </div>
+      </>;
+    })()}
 
     {/* Header */}
     <div style={{borderBottom:"0.5px solid rgba(60,60,67,0.12)",background:"rgba(249,249,249,0.9)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",zIndex:10}}>
@@ -1479,7 +1503,7 @@ function App(){
           const p=members.find(m=>m.id===pr.partnerId);if(!p)return null;
           const prColors={actual:"#34C759",anterior:"#888"};
           const prLabels={actual:"Pareja actual",anterior:"Ex pareja"};
-          return <div key={pr.partnerId} onClick={()=>{setSel(pr.partnerId);setPanel("view");}} style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"0.5px solid rgba(60,60,67,0.2)",borderRadius:100,padding:"4px 10px 4px 4px",cursor:"pointer"}}>
+          return <div key={pr.partnerId} onClick={()=>setEditPartner({partnerId:pr.partnerId,type:pr.type})} style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"0.5px solid rgba(60,60,67,0.2)",borderRadius:100,padding:"4px 10px 4px 4px",cursor:"pointer"}}>
             <Avatar photo={p.photo} name={getDisplay(p).full} size={30} gender={p.gender}/>
             <span style={{fontSize:13,fontWeight:500}}>{getDisplay(p).full}</span>
             <span style={{fontSize:11,color:prColors[pr.type]||"#888",fontWeight:600,background:`${prColors[pr.type]||"#888"}22`,borderRadius:8,padding:"1px 6px"}}>{prLabels[pr.type]||pr.type}</span>
@@ -1528,23 +1552,6 @@ function App(){
         <option value="anterior">Ex pareja</option>
       </Sel>
       <button onClick={addPartner} disabled={!pForm.partnerId} style={{width:"100%",padding:"12px 0",background:pForm.partnerId?"#007AFF":"rgba(120,120,128,0.12)",border:"none",borderRadius:12,color:pForm.partnerId?"#fff":"#999",fontSize:16,fontWeight:600,cursor:pForm.partnerId?"pointer":"default"}}>Agregar pareja</button>
-      {editPartner&&(()=>{
-        const ep=members.find(m=>m.id===editPartner.partnerId);if(!ep)return null;
-        const sel_type=editPartner.type;
-        return <>
-          <div onClick={()=>setEditPartner(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200}}/>
-          <div style={{position:"fixed",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:201,background:"#F2F2F7",borderRadius:16,padding:20,width:"min(300px,90vw)",display:"flex",flexDirection:"column",gap:10}}>
-            <div style={{fontSize:15,fontWeight:700,textAlign:"center",marginBottom:2}}>{getDisplay(ep).full}</div>
-            <button onClick={()=>updatePartnerType(editPartner.partnerId,"actual")} style={{padding:"14px",borderRadius:10,border:`2px solid ${sel_type==="actual"?"#34C759":"rgba(120,120,128,0.2)"}`,background:sel_type==="actual"?"rgba(52,199,89,0.08)":"#fff",color:sel_type==="actual"?"#34C759":"#444",fontSize:15,fontWeight:sel_type==="actual"?700:400,cursor:"pointer",textAlign:"center"}}>
-              ✓ Pareja actual
-            </button>
-            <button onClick={()=>updatePartnerType(editPartner.partnerId,"anterior")} style={{padding:"14px",borderRadius:10,border:`2px solid ${sel_type==="anterior"?"#888":"rgba(120,120,128,0.2)"}`,background:sel_type==="anterior"?"rgba(120,120,128,0.08)":"#fff",color:sel_type==="anterior"?"#555":"#444",fontSize:15,fontWeight:sel_type==="anterior"?700:400,cursor:"pointer",textAlign:"center"}}>
-              Ex pareja
-            </button>
-            <button onClick={()=>setEditPartner(null)} style={{padding:"12px",borderRadius:10,border:"none",background:"rgba(120,120,128,0.12)",fontSize:14,cursor:"pointer",marginTop:2}}>Cancelar</button>
-          </div>
-        </>;
-      })()}
     </div>)}
 
     {/* Personas drawer */}
