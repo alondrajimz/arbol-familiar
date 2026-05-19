@@ -26,6 +26,7 @@ firebase.initializeApp({
 });
 const dbRef=firebase.database().ref("familyTree");
 const logsRef=firebase.database().ref("logs");
+const eventsRef=firebase.database().ref("events");
 </script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -265,6 +266,14 @@ async function uploadMemberPhoto(memberId,photoId,base64){
   const res=await fetch("https://api.cloudinary.com/v1_1/dm0fstth3/image/upload",{method:"POST",body:fd});
   return (await res.json()).secure_url;
 }
+async function uploadEventPhoto(eventId,photoId,base64){
+  const blob=await fetch(base64).then(r=>r.blob());
+  const fd=new FormData();
+  fd.append("file",blob);fd.append("upload_preset","vsku3vni");
+  fd.append("public_id","family/ev-"+eventId+"/p-"+photoId);
+  const res=await fetch("https://api.cloudinary.com/v1_1/dm0fstth3/image/upload",{method:"POST",body:fd});
+  return (await res.json()).secure_url;
+}
 function stripPhotos(members){
   // keep URL photos in DB; only strip base64 (large, shouldn't be in DB)
   return members.map(m=>{
@@ -454,12 +463,12 @@ function PhotoUpload({photo,gender,name,onUp}){
 const CAP_MONTHS=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 function fmtCaptureDate(d){if(!d)return"";const p=d.split("-");if(p.length<3)return d;const dt=new Date(d+"T00:00:00");if(isNaN(dt))return d;return`${dt.getDate()} ${CAP_MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;}
 
-function AddPhotoModal({memberId,members,onDone,onClose}){
+function AddPhotoModal({memberId,members,onDone,onClose,initialTags,uploadFn}){
   const [phase,setPhase]=useState("pick"); // pick|crop|date|tag|saving
   const [cropSrc,setCropSrc]=useState(null);
   const [croppedB64,setCroppedB64]=useState(null);
   const [captureDate,setCaptureDate]=useState("");
-  const [tags,setTags]=useState([memberId]);
+  const [tags,setTags]=useState(initialTags!==undefined?initialTags:[memberId]);
   const imgRef=useRef(null);
   const cropperRef=useRef(null);
   const fileRef=useRef(null);
@@ -496,7 +505,7 @@ function AddPhotoModal({memberId,members,onDone,onClose}){
     setPhase("saving");
     const photoId=genId();
     let url=croppedB64;
-    try{url=await uploadMemberPhoto(memberId,photoId,croppedB64);}catch(e){}
+    try{url=uploadFn?await uploadFn(photoId,croppedB64):await uploadMemberPhoto(memberId,photoId,croppedB64);}catch(e){}
     onDone({id:photoId,url,tags,captureDate,createdAt:Date.now()});
   };
   const toggleTag=id=>setTags(t=>t.includes(id)?t.filter(x=>x!==id):[...t,id]);
@@ -573,10 +582,14 @@ function PhotoViewModal({photos,initIdx,members,onClose,onUpdateTags}){
 }
 
 /* ── Photos Timeline ── */
-function PhotosTimeline({members,visibleIds,onTapPhoto}){
+function PhotosTimeline({members,events,visibleIds,onTapPhoto}){
   const allPhotos=[];
   members.forEach(m=>(m.photos||[]).forEach(p=>allPhotos.push({...p,ownerId:m.id})));
-  const photos=visibleIds?allPhotos.filter(p=>visibleIds.has(p.ownerId)||(p.tags||[]).some(id=>visibleIds.has(id))):allPhotos;
+  (events||[]).forEach(ev=>(ev.photos||[]).forEach(p=>allPhotos.push({...p,ownerId:"event:"+ev.id,eventId:ev.id})));
+  const photos=visibleIds?allPhotos.filter(p=>{
+    if(p.eventId){const ev=(events||[]).find(e=>e.id===p.eventId);return ev&&((ev.attendees||[]).some(id=>visibleIds.has(id))||(p.tags||[]).some(id=>visibleIds.has(id)));}
+    return visibleIds.has(p.ownerId)||(p.tags||[]).some(id=>visibleIds.has(id));
+  }):allPhotos;
   photos.sort((a,b)=>{
     const da=a.captureDate||"";const db=b.captureDate||"";
     if(da!==db)return db.localeCompare(da);
@@ -610,16 +623,112 @@ function PhotosTimeline({members,visibleIds,onTapPhoto}){
   </div>;
 }
 
+/* ── Events ── */
+const EV_ICONS={wedding:"💒",anniversary:"💍",party:"🎊",celebration:"🎊"};
+const EV_LABELS={wedding:"Boda",anniversary:"Aniversario",party:"Fiesta",celebration:"Celebración"};
+
+function AddEventModal({members,onDone,onClose}){
+  const [title,setTitle]=useState("");
+  const [type,setType]=useState("celebration");
+  const [date,setDate]=useState("");
+  const [desc,setDesc]=useState("");
+  const [attendees,setAttendees]=useState([]);
+  const toggle=id=>setAttendees(a=>a.includes(id)?a.filter(x=>x!==id):[...a,id]);
+  const create=()=>{
+    if(!title.trim())return;
+    onDone({id:genId(),title:title.trim(),type,date,description:desc.trim(),attendees,photos:[],createdAt:Date.now()});
+  };
+  const inp={width:"100%",padding:"12px 14px",borderRadius:10,border:"0.5px solid rgba(60,60,67,0.2)",fontSize:15,background:"#fff",outline:"none",boxSizing:"border-box",marginBottom:10};
+  return <>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400}}/>
+    <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:401,background:"#F2F2F7",borderRadius:"14px 14px 0 0",maxHeight:"90vh",overflowY:"auto",paddingBottom:"env(safe-area-inset-bottom,20px)",animation:"sheetUp .3s ease-out"}}>
+      <div style={{display:"flex",justifyContent:"center",padding:"10px 0 2px"}}><div style={{width:36,height:5,borderRadius:3,background:"rgba(60,60,67,0.15)"}}/></div>
+      <div style={{display:"flex",justifyContent:"space-between",padding:"6px 20px 10px"}}>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"#007AFF",fontSize:17,cursor:"pointer"}}>Cancelar</button>
+        <span style={{fontSize:17,fontWeight:600}}>Nuevo Evento</span>
+        <div style={{width:60}}/>
+      </div>
+      <div style={{padding:"0 16px 24px"}}>
+        <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Título (ej: Boda de Ana y Pedro)" style={inp}/>
+        <select value={type} onChange={e=>setType(e.target.value)} style={{...inp,appearance:"none"}}>
+          <option value="celebration">🎊 Celebración</option>
+          <option value="wedding">💒 Boda</option>
+          <option value="anniversary">💍 Aniversario</option>
+          <option value="party">🎊 Fiesta</option>
+        </select>
+        <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={inp}/>
+        <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Descripción (opcional)" rows={3} style={{...inp,resize:"none"}}/>
+        <div style={{fontSize:12,fontWeight:600,color:"rgba(60,60,67,0.5)",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Asistentes</div>
+        <div style={{background:"#fff",borderRadius:10,overflow:"hidden",marginBottom:14}}>
+          {[...members].sort((a,b)=>getDisplay(a).full.localeCompare(getDisplay(b).full)).map((m,i,arr)=>(
+            <div key={m.id} onClick={()=>toggle(m.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:i<arr.length-1?"0.5px solid rgba(60,60,67,0.07)":"none",cursor:"pointer"}}>
+              <Avatar photo={m.photo} name={getDisplay(m).full} size={32} gender={m.gender}/>
+              <span style={{flex:1,fontSize:14}}>{getDisplay(m).full}</span>
+              <div style={{width:22,height:22,borderRadius:11,background:attendees.includes(m.id)?"#007AFF":"rgba(120,120,128,0.15)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13}}>{attendees.includes(m.id)?"✓":""}</div>
+            </div>
+          ))}
+        </div>
+        <button onClick={create} disabled={!title.trim()} style={{width:"100%",padding:"14px 0",background:title.trim()?"#007AFF":"rgba(120,120,128,0.12)",border:"none",borderRadius:12,color:title.trim()?"#fff":"#999",fontSize:17,fontWeight:600,cursor:title.trim()?"pointer":"default"}}>Crear evento</button>
+      </div>
+    </div>
+  </>;
+}
+
+function EventViewModal({event,members,onClose,onAddPhoto,onTapPhoto}){
+  const icon=EV_ICONS[event.type]||"🎊";
+  const label=EV_LABELS[event.type]||"Evento";
+  const attendeeMembers=(event.attendees||[]).map(id=>members.find(m=>m.id===id)).filter(Boolean);
+  const photos=event.photos||[];
+  return <>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400}}/>
+    <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:401,background:"#F2F2F7",borderRadius:"14px 14px 0 0",maxHeight:"90vh",overflowY:"auto",paddingBottom:"env(safe-area-inset-bottom,20px)",animation:"sheetUp .3s ease-out"}}>
+      <div style={{display:"flex",justifyContent:"center",padding:"10px 0 2px"}}><div style={{width:36,height:5,borderRadius:3,background:"rgba(60,60,67,0.15)"}}/></div>
+      <div style={{display:"flex",justifyContent:"space-between",padding:"6px 20px 10px"}}>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"#007AFF",fontSize:17,cursor:"pointer"}}>Cerrar</button>
+        <span style={{fontSize:17,fontWeight:600}}>{label}</span>
+        <div style={{width:50}}/>
+      </div>
+      <div style={{padding:"0 16px 24px",display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{background:"#fff",borderRadius:12,padding:16,textAlign:"center"}}>
+          <div style={{fontSize:48}}>{icon}</div>
+          <div style={{fontSize:20,fontWeight:700,marginTop:6}}>{event.title}</div>
+          {event.date&&<div style={{fontSize:14,color:"#888",marginTop:4}}>{fmtCaptureDate(event.date)}</div>}
+          {event.description&&<div style={{fontSize:14,color:"rgba(60,60,67,0.7)",marginTop:8}}>{event.description}</div>}
+        </div>
+        {attendeeMembers.length>0&&<div style={{background:"#fff",borderRadius:12,overflow:"hidden"}}>
+          <div style={{padding:"10px 14px 6px",fontSize:12,color:"rgba(60,60,67,0.6)",fontWeight:500,textTransform:"uppercase",letterSpacing:.5}}>Asistentes</div>
+          {attendeeMembers.map((m,i)=>(
+            <div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",borderTop:"0.5px solid rgba(60,60,67,0.07)"}}>
+              <Avatar photo={m.photo} name={getDisplay(m).full} size={36} gender={m.gender}/>
+              <span style={{fontSize:14,fontWeight:500}}>{getDisplay(m).full}</span>
+            </div>
+          ))}
+        </div>}
+        <div style={{background:"#fff",borderRadius:12,overflow:"hidden",padding:"10px 14px"}}>
+          <div style={{fontSize:12,color:"rgba(60,60,67,0.6)",fontWeight:500,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Fotos</div>
+          <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
+            {photos.map((p,i)=>(
+              <div key={p.id||i} onClick={()=>onTapPhoto(photos,i)} style={{flexShrink:0,cursor:"pointer"}}>
+                <img src={p.url} style={{width:80,height:80,objectFit:"cover",borderRadius:8,display:"block"}}/>
+              </div>
+            ))}
+            <div onClick={onAddPhoto} style={{flexShrink:0,width:80,height:80,borderRadius:8,background:"rgba(120,120,128,0.12)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:32,color:"#007AFF"}}>+</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </>;
+}
+
 /* ── Calendar ── */
 const CAL_MONTHS=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const CAL_DAYS=["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
 
-function CalendarView({members,onTapPerson}){
+function CalendarView({members,events,onTapPerson,onTapEvent}){
   const [cal,setCal]=useState(()=>{const d=new Date();return{y:d.getFullYear(),m:d.getMonth()};});
   const [daySheet,setDaySheet]=useState(null);
   const {y,m}=cal;
 
-  // Build day→events map for current month
   const evMap={};
   members.forEach(mem=>{
     const addEv=(dateStr,type)=>{
@@ -632,6 +741,14 @@ function CalendarView({members,onTapPerson}){
     };
     addEv(mem.birthDate,"birthday");
     if(mem.deceased)addEv(mem.deathDate,"death");
+  });
+  (events||[]).forEach(ev=>{
+    if(!ev.date)return;
+    const p=ev.date.split("-");if(p.length<3)return;
+    const em=parseInt(p[1])-1,ed=parseInt(p[2]);
+    if(em!==m)return;
+    if(!evMap[ed])evMap[ed]=[];
+    evMap[ed].push({event:ev,type:ev.type,isEvent:true});
   });
 
   const firstDow=new Date(y,m,1).getDay();
@@ -666,22 +783,24 @@ function CalendarView({members,onTapPerson}){
         if(!day)return <div key={`x${i}`}/>;
         const evs=evMap[day]||[];
         const hit=evs.length>0;
+        const memberEvs=evs.filter(e=>!e.isEvent);
+        const famEvs=evs.filter(e=>e.isEvent);
         const EvAvatar=({ev,size})=><div style={{position:"relative",display:"inline-block",textAlign:"center"}}>
           <Avatar photo={ev.member.photo} name={getDisplay(ev.member).full} size={size} gender={ev.member.gender} deceased={ev.member.deceased}/>
           <span style={{position:"absolute",top:-3,right:-3,fontSize:16,lineHeight:1}}>{ev.type==="birthday"?"🎉":"🕊️"}</span>
           <div style={{fontSize:9,color:"rgba(60,60,67,0.55)",lineHeight:1,marginTop:1}}>{ev.years} {ev.years===1?"año":"años"}</div>
         </div>;
         let avatarBlock=null;
-        if(evs.length===1){
-          avatarBlock=<div style={{display:"flex",justifyContent:"center",alignItems:"center",flex:1}}><EvAvatar ev={evs[0]} size={80}/></div>;
-        } else if(evs.length===2){
+        if(memberEvs.length===1){
+          avatarBlock=<div style={{display:"flex",justifyContent:"center",alignItems:"center",flex:1}}><EvAvatar ev={memberEvs[0]} size={80}/></div>;
+        } else if(memberEvs.length===2){
           avatarBlock=<div style={{display:"flex",flexDirection:"column",justifyContent:"space-evenly",alignItems:"center",flex:1}}>
-            {evs.map((ev,ei)=><EvAvatar key={ei} ev={ev} size={60}/>)}
+            {memberEvs.map((ev,ei)=><EvAvatar key={ei} ev={ev} size={60}/>)}
           </div>;
-        } else {
+        } else if(memberEvs.length>2){
           avatarBlock=<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:1,flex:1}}>
-            {evs.slice(0,4).map((ev,ei)=><div key={ei} style={{display:"flex",justifyContent:"center",alignItems:"center"}}><EvAvatar ev={ev} size={28}/></div>)}
-            {evs.length>4&&<div style={{fontSize:8,color:"#007AFF",textAlign:"center",alignSelf:"center"}}>+{evs.length-4}</div>}
+            {memberEvs.slice(0,4).map((ev,ei)=><div key={ei} style={{display:"flex",justifyContent:"center",alignItems:"center"}}><EvAvatar ev={ev} size={28}/></div>)}
+            {memberEvs.length>4&&<div style={{fontSize:8,color:"#007AFF",textAlign:"center",alignSelf:"center"}}>+{memberEvs.length-4}</div>}
           </div>;
         }
         return <div key={day} onClick={hit?()=>setDaySheet(evs):undefined}
@@ -689,6 +808,10 @@ function CalendarView({members,onTapPerson}){
             border:isToday(day)?"2px solid #007AFF":"2px solid transparent",boxSizing:"border-box",display:"flex",flexDirection:"column"}}>
           <div style={{fontSize:11,fontWeight:isToday(day)?700:400,color:isToday(day)?"#007AFF":"#1c1c1e",lineHeight:1,marginBottom:1}}>{day}</div>
           {avatarBlock}
+          {famEvs.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:1,justifyContent:"center",marginTop:2}}>
+            {famEvs.slice(0,2).map((e,i)=><span key={i} style={{fontSize:14}}>{EV_ICONS[e.type]||"🎊"}</span>)}
+            {famEvs.length>2&&<span style={{fontSize:8,color:"#007AFF"}}>+{famEvs.length-2}</span>}
+          </div>}
         </div>;
       })}
     </div>
@@ -703,8 +826,15 @@ function CalendarView({members,onTapPerson}){
           <div style={{width:50}}/>
         </div>
         <div style={{padding:"0 16px 24px",display:"flex",flexDirection:"column",gap:10}}>
-          {daySheet.map((ev,i)=>(
-            <div key={i} onClick={()=>{onTapPerson(ev.member.id);setDaySheet(null);}} style={{background:"#fff",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"center",gap:14,cursor:"pointer"}}>
+          {daySheet.map((ev,i)=>ev.isEvent
+            ?<div key={i} onClick={()=>{onTapEvent&&onTapEvent(ev.event);setDaySheet(null);}} style={{background:"#fff",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"center",gap:14,cursor:"pointer"}}>
+              <span style={{fontSize:40,lineHeight:1}}>{EV_ICONS[ev.type]||"🎊"}</span>
+              <div>
+                <div style={{fontWeight:600,fontSize:16}}>{ev.event.title}</div>
+                <div style={{fontSize:14,color:"#888",marginTop:2}}>{(EV_LABELS||{})[ev.type]||"Evento"}{ev.event.date?" · "+fmtCaptureDate(ev.event.date):""}</div>
+              </div>
+            </div>
+            :<div key={i} onClick={()=>{onTapPerson(ev.member.id);setDaySheet(null);}} style={{background:"#fff",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"center",gap:14,cursor:"pointer"}}>
               <Avatar photo={ev.member.photo} name={getDisplay(ev.member).full} size={54} gender={ev.member.gender} deceased={ev.member.deceased}/>
               <div>
                 <div style={{fontWeight:600,fontSize:16}}>{getDisplay(ev.member).full}</div>
@@ -712,7 +842,7 @@ function CalendarView({members,onTapPerson}){
                 <div style={{fontSize:12,color:"rgba(60,60,67,0.5)",marginTop:2}}>{ev.type==="birthday"?`${ev.years} años`:`${ev.years} años desde su partida`}</div>
               </div>
             </div>
-          ))}
+          )}
         </div>
       </div>
     </>}
@@ -781,6 +911,10 @@ function App(){
   const [logs,setLogs]=useState([]);
   const [photoView,setPhotoView]=useState(null); // {photos,idx}
   const [addPhotoFor,setAddPhotoFor]=useState(null); // memberId
+  const [events,setEvents]=useState([]);
+  const [showAddEvent,setShowAddEvent]=useState(false);
+  const [viewEvent,setViewEvent]=useState(null);
+  const [addPhotoForEvent,setAddPhotoForEvent]=useState(null);
   const familyRootRef=useRef(localStorage.getItem("familyRoot"));
   const isLocal=useRef(false);
   const autoSaveTimer=useRef(null);
@@ -813,6 +947,15 @@ function App(){
       setLogs(Object.values(val).sort((a,b)=>b.timestamp.localeCompare(a.timestamp)));
     });
     return()=>logsRef.off();
+  },[]);
+
+  useEffect(()=>{
+    eventsRef.on("value",snap=>{
+      const val=snap.val();
+      if(!val){setEvents([]);return;}
+      setEvents(Object.entries(val).map(([k,v])=>({...v,id:v.id||k})));
+    });
+    return()=>eventsRef.off();
   },[]);
 
   // Auto save
@@ -1004,6 +1147,16 @@ function App(){
     });
   };
 
+  const saveEvent=ev=>{eventsRef.child(ev.id).set(ev);setEvents(prev=>[...prev.filter(e=>e.id!==ev.id),ev]);};
+  const addEventPhoto=(eventId,photoData)=>{
+    setEvents(prev=>prev.map(ev=>{if(ev.id!==eventId)return ev;const photos=[...(ev.photos||[]),photoData];eventsRef.child(eventId).update({photos});return{...ev,photos};}));
+    setViewEvent(v=>v&&v.id===eventId?{...v,photos:[...(v.photos||[]),photoData]}:v);
+  };
+  const updateEventPhotoTags=(eventId,photo,newTags)=>{
+    setEvents(prev=>prev.map(ev=>{if(ev.id!==eventId)return ev;const photos=(ev.photos||[]).map(p=>p.id===photo.id?{...p,tags:newTags}:p);eventsRef.child(eventId).update({photos});return{...ev,photos};}));
+    setViewEvent(v=>v&&v.id===eventId?{...v,photos:(v.photos||[]).map(p=>p.id===photo.id?{...p,tags:newTags}:p)}:v);
+  };
+
   const updatePhotoTags=(photo,newTags)=>{
     setMembers(prev=>{
       const next=prev.map(m=>{
@@ -1065,6 +1218,8 @@ function App(){
     return members.filter(m=>allIds.has(m.id));
   })();
   const getVisibleMembers=()=>displayedMembers;
+  const visibleMemberSet=familyView==="general"?null:new Set(getVisibleMembers().map(m=>m.id));
+  const visibleEvents=visibleMemberSet?events.filter(ev=>(ev.attendees||[]).some(id=>visibleMemberSet.has(id))):events;
   if(loading)return <div style={{width:"100%",height:"100vh",background:"#F2F2F7",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
     <span style={{fontSize:48}}>🌳</span><span style={{color:"rgba(60,60,67,0.6)",fontSize:16}}>Cargando…</span></div>;
 
@@ -1118,8 +1273,9 @@ function App(){
     </div>
 
     {/* Calendar or Photos or Canvas */}
-    {showCalendar&&<CalendarView members={getVisibleMembers()} onTapPerson={id=>{setShowCalendar(false);tapCard(id);}}/>}
-    {showPhotos&&<PhotosTimeline members={members} visibleIds={familyView==="general"?null:new Set(getVisibleMembers().map(m=>m.id))} onTapPhoto={(photos,idx)=>setPhotoView({photos,idx})}/>}
+    {showCalendar&&<CalendarView members={getVisibleMembers()} events={visibleEvents} onTapPerson={id=>{setShowCalendar(false);tapCard(id);}} onTapEvent={ev=>setViewEvent(ev)}/>}
+    {showCalendar&&<div onClick={()=>setShowAddEvent(true)} style={{position:"fixed",bottom:90,right:20,zIndex:50,width:50,height:50,borderRadius:25,background:"#007AFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 12px rgba(0,0,0,0.25)",fontSize:22,color:"#fff"}}>➕</div>}
+    {showPhotos&&<PhotosTimeline members={members} events={visibleEvents} visibleIds={visibleMemberSet} onTapPhoto={(photos,idx)=>setPhotoView({photos,idx})}/>}
     <div ref={canvasRef} style={{flex:1,overflow:"auto",background:"#F2F2F7",display:(showCalendar||showPhotos)?"none":"block"}}>
       <svg width={svgW*zoom} height={svgH*zoom} style={{display:"block",touchAction:"none"}}
         onTouchStart={e=>{
@@ -1193,6 +1349,9 @@ function App(){
         const allPhotos=[];
         members.forEach(m=>(m.photos||[]).forEach(p=>{
           if(m.id===selM.id||(p.tags||[]).includes(selM.id))allPhotos.push({...p,ownerId:m.id});
+        }));
+        events.forEach(ev=>(ev.photos||[]).forEach(p=>{
+          if((p.tags||[]).includes(selM.id))allPhotos.push({...p,ownerId:"event:"+ev.id,eventId:ev.id});
         }));
         allPhotos.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
         return <div style={{background:"#fff",borderRadius:12,overflow:"hidden",padding:"10px 14px"}}>
@@ -1409,12 +1568,32 @@ function App(){
       onClose={()=>setAddPhotoFor(null)}
       onDone={photoData=>{addMemberPhoto(addPhotoFor,photoData);setAddPhotoFor(null);flash("Foto guardada ✓");}}
     />}
+    {showAddEvent&&<AddEventModal
+      members={members}
+      onClose={()=>setShowAddEvent(false)}
+      onDone={ev=>{saveEvent(ev);setShowAddEvent(false);flash("Evento creado ✓");}}
+    />}
+    {viewEvent&&<EventViewModal
+      event={viewEvent}
+      members={members}
+      onClose={()=>setViewEvent(null)}
+      onAddPhoto={()=>setAddPhotoForEvent(viewEvent.id)}
+      onTapPhoto={(photos,idx)=>setPhotoView({photos,idx})}
+    />}
+    {addPhotoForEvent&&<AddPhotoModal
+      memberId={addPhotoForEvent}
+      members={members}
+      initialTags={[]}
+      uploadFn={(photoId,b64)=>uploadEventPhoto(addPhotoForEvent,photoId,b64)}
+      onClose={()=>setAddPhotoForEvent(null)}
+      onDone={photoData=>{addEventPhoto(addPhotoForEvent,photoData);setAddPhotoForEvent(null);flash("Foto guardada ✓");}}
+    />}
     {photoView&&<PhotoViewModal
       photos={photoView.photos}
       initIdx={photoView.idx}
       members={members}
       onClose={()=>setPhotoView(null)}
-      onUpdateTags={(photo,tags)=>{updatePhotoTags(photo,tags);flash("Tags actualizados ✓");}}
+      onUpdateTags={(photo,tags)=>{if(photo.eventId)updateEventPhotoTags(photo.eventId,photo,tags);else updatePhotoTags(photo,tags);flash("Tags actualizados ✓");}}
     />}
 
     {/* History trigger */}
