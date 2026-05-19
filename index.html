@@ -333,8 +333,8 @@ function TreeLines({members}){
       const x1=Math.min(m.x,sp.x)+35,x2=Math.max(m.x,sp.x)-35;
       const y=(m.y+sp.y)/2-16;
       lines.push(<line key={`couple-${key}`} x1={x1} y1={y} x2={x2} y2={y}
-        stroke={pr.type==="casado"?"#e94b8b":"#999"} strokeWidth={2}
-        strokeOpacity={1} strokeDasharray={pr.type==="casado"?"none":"5 4"}/>);
+        stroke="#bbb" strokeWidth={2}
+        strokeOpacity={1} strokeDasharray={pr.type==="casado"?"":"5,5"}/>);
     });
   });
 
@@ -1101,12 +1101,14 @@ function App(){
   };
 
   const updatePartnerType=(partnerId,newType)=>{
+    console.log("updatePartnerType",{sel,partnerId,newType});
     update(p=>p.map(m=>{
       if(m.id===sel)return{...m,partnerships:m.partnerships.map(x=>x.partnerId===partnerId?{...x,type:newType}:x)};
       if(m.id===partnerId)return{...m,partnerships:m.partnerships.map(x=>x.partnerId===sel?{...x,type:newType}:x)};
       return m;
     }));
     setEditPartner(null);
+    flash("Estado actualizado ✓");
   };
 
   const removePartner=pid=>{
@@ -1483,14 +1485,17 @@ function App(){
         const prColors={casado:"#34C759",divorciado:"#FF9500",viudo:"#3a3a3c"};
         const prLabels={casado:"Casado/a",divorciado:"Divorciado/a",viudo:"Viudo/a"};
         return <div key={pr.partnerId} style={{background:"#fff",borderRadius:12,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div onClick={()=>setEditPartner({partnerId:pr.partnerId,type:pr.type})} style={{display:"flex",alignItems:"center",gap:10,flex:1,cursor:"pointer"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,flex:1}}>
             <Avatar photo={p.photo} name={getDisplay(p).full} size={40} gender={p.gender}/>
             <div>
               <div style={{fontWeight:600}}>{getDisplay(p).full}</div>
-              <div style={{fontSize:12,color:prColors[pr.type]||"#888",fontWeight:500}}>{prLabels[pr.type]||"Ex pareja"}</div>
+              <div style={{fontSize:12,color:prColors[pr.type]||"#888",fontWeight:500}}>{prLabels[pr.type]||pr.type}</div>
             </div>
           </div>
-          <button onClick={()=>removePartner(pr.partnerId)} style={{width:28,height:28,borderRadius:14,background:"rgba(120,120,128,0.12)",border:"none",color:"#FF3B30",fontSize:16,fontWeight:700,cursor:"pointer"}}>×</button>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <button onClick={()=>{console.log("editPartner abierto:",pr.partnerId,pr.type);setEditPartner({partnerId:pr.partnerId,type:pr.type});}} style={{padding:"5px 10px",borderRadius:8,border:"1px solid rgba(0,122,255,0.3)",background:"rgba(0,122,255,0.08)",color:"#007AFF",fontSize:12,fontWeight:600,cursor:"pointer"}}>Editar estado</button>
+            <button onClick={()=>removePartner(pr.partnerId)} style={{width:28,height:28,borderRadius:14,background:"rgba(120,120,128,0.12)",border:"none",color:"#FF3B30",fontSize:16,fontWeight:700,cursor:"pointer"}}>×</button>
+          </div>
         </div>;})}
       <SecTitle>Agregar pareja</SecTitle>
       <Sel value={pForm.partnerId} onChange={e=>setPForm({...pForm,partnerId:e.target.value})}>
