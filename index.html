@@ -1050,9 +1050,7 @@ function App(){
         <style>{"._hbar::-webkit-scrollbar{display:none}"}</style>
         {[
           ...(!showCalendar&&!showPhotos?[
-            {label:"+",onClick:()=>setZoom(z=>Math.min(z+0.15,2.5)),bg:"rgba(120,120,128,0.12)"},
-            {label:"−",onClick:()=>setZoom(z=>Math.max(z-0.15,0.2)),bg:"rgba(120,120,128,0.12)"},
-            {label:"Ajustar",onClick:fit,bg:"rgba(120,120,128,0.12)"},
+{label:"Ajustar",onClick:fit,bg:"rgba(120,120,128,0.12)"},
           ]:[]),
           {label:"👥 Personas",onClick:()=>setShowPersonas(true),bg:"rgba(120,120,128,0.12)"},
           ...(showCalendar||showPhotos?[
