@@ -1099,7 +1099,6 @@ function App(){
 {label:"Ajustar",onClick:fit,bg:"rgba(120,120,128,0.12)"},
           ]:[]),
           {label:"👥 Personas",onClick:()=>setShowPersonas(true),bg:"rgba(120,120,128,0.12)"},
-          {label:"👨‍👩‍👧‍👦 Familias",onClick:()=>setShowFamilias(true),bg:"rgba(120,120,128,0.12)"},
           ...(showCalendar||showPhotos?[
             {label:"🌳 Árbol",onClick:()=>{setShowCalendar(false);setShowPhotos(false);},bg:"#007AFF",color:"#fff"},
           ]:[
@@ -1372,17 +1371,22 @@ function App(){
       </div>
     </>}
 
+    {/* Family chip */}
+    {(()=>{
+      const activeFam=familyView!=="general"?getFamilies().find(f=>f.id===familyView):null;
+      const famLabel=activeFam?"Familia "+activeFam.name:"Árbol General";
+      return <div onClick={()=>setShowFamilias(true)} style={{position:"fixed",bottom:90,right:20,zIndex:50,background:"#fff",borderRadius:100,padding:"6px 12px 6px 10px",display:"flex",alignItems:"center",gap:8,boxShadow:"0 2px 12px rgba(0,0,0,0.18)",cursor:"pointer"}}>
+        <span style={{fontSize:20,lineHeight:1}}>👨‍👩‍👧‍👦</span>
+        <span style={{fontSize:13,fontWeight:600}}>{famLabel}</span>
+      </div>;
+    })()}
+
     {/* Root person chip */}
     {familyRoot&&(()=>{
       const rm=members.find(m=>m.id===familyRoot);if(!rm)return null;
-      const activeFam=familyView!=="general"?getFamilies().find(f=>f.id===familyView):null;
-      const famLabel=activeFam?"Familia "+activeFam.name:"Árbol General";
       return <div onClick={()=>{setRootSelect(familyRoot);setShowRootModal(true);}} style={{position:"fixed",bottom:20,right:20,zIndex:50,background:"#fff",borderRadius:100,padding:"6px 12px 6px 6px",display:"flex",alignItems:"center",gap:8,boxShadow:"0 2px 12px rgba(0,0,0,0.18)",cursor:"pointer"}}>
         <Avatar photo={rm.photo} name={getDisplay(rm).full} size={32} gender={rm.gender}/>
-        <div>
-          <div style={{fontSize:13,fontWeight:600}}>{getDisplay(rm).first}</div>
-          <div style={{fontSize:11,color:"#888",lineHeight:1.2}}>{famLabel}</div>
-        </div>
+        <span style={{fontSize:13,fontWeight:600}}>{getDisplay(rm).first}</span>
       </div>;
     })()}
 
