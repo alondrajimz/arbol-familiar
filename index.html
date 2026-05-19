@@ -277,12 +277,13 @@ function saveToDB(members){
 /* ── Components ── */
 function Avatar({photo,name,size=70,gender,deceased}){
   const ini=(name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
-  const grad=gender==="F"?"linear-gradient(135deg,#FF2D55,#FF6482)":"linear-gradient(135deg,#007AFF,#5AC8FA)";
+  const grad=deceased?"linear-gradient(135deg,#666,#999)":(gender==="F"?"linear-gradient(135deg,#FF2D55,#FF6482)":"linear-gradient(135deg,#007AFF,#5AC8FA)");
+  const bgPhoto=photo?(deceased?photo.replace("/upload/","/upload/e_grayscale/"):photo):null;
   return <div style={{width:size,height:size,borderRadius:size/2,
-    background:photo?`url(${photo}) center/cover no-repeat`:grad,
+    background:bgPhoto?`url(${bgPhoto}) center/cover no-repeat`:grad,
     border:deceased?"3px solid #999":(gender==="F"?"3px solid #FF2D55":"3px solid #007AFF"),
     margin:"0 auto",lineHeight:size+"px",textAlign:"center",
-    color:"#fff",fontSize:size*.3,fontWeight:600}}>{!photo&&ini}</div>;
+    color:"#fff",fontSize:size*.3,fontWeight:600}}>{!bgPhoto&&ini}</div>;
 }
 
 function PersonNode({m,onTap}){
@@ -290,7 +291,7 @@ function PersonNode({m,onTap}){
   const age=calcAge(m.birthDate,m.deceased?m.deathDate:null);
   const txt={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 4px"};
   return (
-    <foreignObject key={m.id} x={m.x-75} y={m.y-55} width={150} height={130} style={{opacity:m.deceased?0.5:1}}>
+    <foreignObject key={m.id} x={m.x-75} y={m.y-55} width={150} height={130}>
       <div className="person-card" onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden"}}>
         <Avatar photo={m.photo} name={d.full} size={70} gender={m.gender} deceased={m.deceased}/>
         <div style={{marginTop:4,fontSize:14,fontWeight:700,color:m.deceased?"#888":"#000",height:18,...txt}}>
