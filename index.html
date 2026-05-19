@@ -32,6 +32,7 @@ input,select,button{font-family:inherit}
 @keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 @keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}
 #debug{position:fixed;top:60px;right:10px;width:300px;max-height:400px;overflow:auto;background:rgba(0,0,0,0.9);color:#0f0;font:10px monospace;padding:10px;z-index:9999;pointer-events:none}
+.person-card{width:150px;min-height:100px;box-sizing:border-box}
 </style>
 </head>
 <body>
@@ -289,13 +290,13 @@ function PersonNode({m,onTap,relation}){
   const opacity=relation==="medium"?0.6:relation==="distant"?0.2:1;
   return (
     <foreignObject key={m.id} x={m.x-75} y={m.y-55} width={150} height={130}>
-      <div className={`pn-${m.id}`} onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden",opacity}}>
+      <div className={`pn-${m.id} person-card`} onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden",opacity}}>
         <Avatar photo={m.photo} name={d.full} size={70} gender={m.gender} deceased={m.deceased}/>
-        <div style={{marginTop:4,fontSize:14,fontWeight:700,color:m.deceased?"#888":"#000",...txt}}>
+        <div style={{marginTop:4,fontSize:14,fontWeight:700,color:m.deceased?"#888":"#000",height:18,...txt}}>
           {m.deceased?"† ":""}{d.first}
         </div>
-        {d.last&&<div style={{fontSize:11,color:"#666",...txt}}>{d.last}</div>}
-        {age!==null&&<div style={{fontSize:11,color:"#999"}}>{age} años</div>}
+        <div style={{fontSize:11,color:"#666",height:16,...txt}}>{d.last||""}</div>
+        <div style={{fontSize:11,color:"#999",height:16}}>{age!==null?`${age} años`:""}</div>
       </div>
     </foreignObject>
   );
