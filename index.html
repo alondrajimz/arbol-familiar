@@ -98,13 +98,12 @@ function autoLayout(members){
       if(gen[x.id]!==targetGen){gen[x.id]=targetGen;chg=true;coupleForced.add(x.id);}
       if(gen[p.id]!==targetGen){gen[p.id]=targetGen;chg=true;coupleForced.add(p.id);}
     }));
-    // Siblings → same gen (grouped by complete parent pair, so full siblings stay together)
+    // Siblings → same gen (max = deepest sibling's row, keeps all on one row)
     const sibs={};
-    m.forEach(x=>{
-      const k=famKey(x);
-      if(!sibs[k])sibs[k]=[];
-      if(!sibs[k].includes(x.id))sibs[k].push(x.id);
-    });
+    m.forEach(x=>[x.parent1Id,x.parent2Id].filter(Boolean).forEach(pid=>{
+      if(!sibs[pid])sibs[pid]=[];
+      if(!sibs[pid].includes(x.id))sibs[pid].push(x.id);
+    }));
     Object.values(sibs).forEach(ids=>{
       const parentGens=ids.map(id=>{const x=byId[id];const gs=[x.parent1Id,x.parent2Id].filter(Boolean).map(p=>gen[p]).filter(g=>g!=null);return gs.length?Math.max(...gs)+1:gen[id]??0;});
       const targetG=Math.max(...parentGens);
