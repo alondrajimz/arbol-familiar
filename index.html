@@ -602,7 +602,7 @@ function CalendarView({members,onTapPerson}){
         const EvAvatar=({ev,size})=><div style={{position:"relative",display:"inline-block",textAlign:"center"}}>
           <Avatar photo={ev.member.photo} name={getDisplay(ev.member).full} size={size} gender={ev.member.gender} deceased={ev.member.deceased}/>
           <span style={{position:"absolute",top:-3,right:-3,fontSize:16,lineHeight:1}}>{ev.type==="birthday"?"🎉":"🕊️"}</span>
-          <div style={{fontSize:9,color:"rgba(60,60,67,0.55)",lineHeight:1,marginTop:1}}>{ev.years}a</div>
+          <div style={{fontSize:9,color:"rgba(60,60,67,0.55)",lineHeight:1,marginTop:1}}>{ev.years} {ev.years===1?"año":"años"}</div>
         </div>;
         let avatarBlock=null;
         if(evs.length===1){
