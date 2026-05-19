@@ -277,14 +277,13 @@ function Avatar({photo,name,size=70,gender,deceased}){
     margin:"0 auto"}}>{!photo&&ini}</div>;
 }
 
-function PersonNode({m,onTap,relation}){
+function PersonNode({m,onTap}){
   const d=getDisplay(m);
   const age=calcAge(m.birthDate,m.deceased?m.deathDate:null);
   const txt={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 4px"};
-  const opacity=relation==="medium"?0.6:relation==="distant"?0.2:1;
   return (
     <foreignObject key={m.id} x={m.x-75} y={m.y-55} width={150} height={130}>
-      <div className={`pn-${m.id} person-card`} onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden",opacity}}>
+      <div className="person-card" onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden"}}>
         <Avatar photo={m.photo} name={d.full} size={70} gender={m.gender} deceased={m.deceased}/>
         <div style={{marginTop:4,fontSize:14,fontWeight:700,color:m.deceased?"#888":"#000",height:18,...txt}}>
           {m.deceased?"† ":""}{d.first}
@@ -296,11 +295,10 @@ function PersonNode({m,onTap,relation}){
   );
 }
 
-function TreeLines({members,relations={}}){
+function TreeLines({members}){
   const lines=[];
   const byId=Object.fromEntries(members.map(m=>[m.id,m]));
   const drawn=new Set();
-  const isDistant=id=>relations[id]==="distant";
 
   // Couple lines
   members.forEach(m=>{
@@ -311,10 +309,9 @@ function TreeLines({members,relations={}}){
       if(Math.abs(m.y-sp.y)>10)return;
       const x1=Math.min(m.x,sp.x)+35,x2=Math.max(m.x,sp.x)-35;
       const y=(m.y+sp.y)/2-16;
-      const so=isDistant(m.id)&&isDistant(pr.partnerId)?0.1:1;
       lines.push(<line key={`couple-${key}`} x1={x1} y1={y} x2={x2} y2={y}
         stroke={pr.type==="anterior"?"#ccc":"#bbb"} strokeWidth={2}
-        strokeOpacity={so} strokeDasharray={pr.type==="anterior"?"5 4":"none"}/>);
+        strokeOpacity={1} strokeDasharray={pr.type==="anterior"?"5 4":"none"}/>);
     });
   });
 
@@ -332,9 +329,6 @@ function TreeLines({members,relations={}}){
     const children=fam.children;
     if(!parents.length||!children.length)return;
 
-    const allIds=[...fam.parents,...children.map(c=>c.id)];
-    const so=allIds.every(id=>isDistant(id))?0.1:1;
-
     const parentCenterX=parents.reduce((s,p)=>s+p.x,0)/parents.length;
     const parentY=parents[0].y+19;
     const childY=children[0].y-51;
@@ -342,7 +336,7 @@ function TreeLines({members,relations={}}){
 
     lines.push(<line key={`pv-${fam.parents.join("-")}`}
       x1={parentCenterX} y1={parentY} x2={parentCenterX} y2={midY}
-      stroke="#bbb" strokeWidth={2} strokeOpacity={so}/>);
+      stroke="#bbb" strokeWidth={2} strokeOpacity={1}/>);
 
     const childXs=children.map(c=>c.x).sort((a,b)=>a-b);
     const barLeft=Math.min(parentCenterX,childXs[0]);
@@ -351,14 +345,13 @@ function TreeLines({members,relations={}}){
     if(children.length>1||Math.abs(parentCenterX-childXs[0])>5){
       lines.push(<line key={`ph-${fam.parents.join("-")}`}
         x1={barLeft} y1={midY} x2={barRight} y2={midY}
-        stroke="#bbb" strokeWidth={2} strokeOpacity={so}/>);
+        stroke="#bbb" strokeWidth={2} strokeOpacity={1}/>);
     }
 
     children.forEach(c=>{
-      const cso=isDistant(c.id)&&so===0.1?0.1:so===0.1?0.1:isDistant(c.id)?0.1:1;
       lines.push(<line key={`cv-${c.id}`}
         x1={c.x} y1={midY} x2={c.x} y2={childY}
-        stroke="#bbb" strokeWidth={2} strokeOpacity={cso}/>);
+        stroke="#bbb" strokeWidth={2} strokeOpacity={1}/>);
     });
   });
 
@@ -639,8 +632,6 @@ function App(){
   if(loading)return <div style={{width:"100%",height:"100vh",background:"#F2F2F7",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
     <span style={{fontSize:48}}>🌳</span><span style={{color:"rgba(60,60,67,0.6)",fontSize:16}}>Cargando…</span></div>;
 
-  const relMap=Object.fromEntries(members.map(m=>[m.id,getRelation(m.id,familyRoot,members)]));
-
   const sheet=(title,onClose,content)=><>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.3)",zIndex:50}}/>
     <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:60,background:"#F2F2F7",borderRadius:"14px 14px 0 0",maxHeight:"90vh",overflowY:"auto",paddingBottom:"env(safe-area-inset-bottom,20px)",animation:"sheetUp .3s ease-out"}}>
@@ -684,13 +675,12 @@ function App(){
       </div>
     </div>
 
-    <style>{members.map(m=>{const op=relMap[m.id]==="medium"?0.6:relMap[m.id]==="distant"?0.2:1;return`.pn-${m.id}{opacity:${op}!important}`;}).join("")}</style>
     {/* Canvas */}
     <div ref={canvasRef} style={{flex:1,overflow:"auto",background:"#F2F2F7"}}>
       <svg width={svgW*zoom} height={svgH*zoom} style={{display:"block"}}>
         <g transform={`scale(${zoom})`}>
-          <TreeLines members={members} relations={relMap}/>
-          {members.map(m=><PersonNode key={m.id} m={m} onTap={tapCard} relation={relMap[m.id]||"distant"}/>)}
+          <TreeLines members={members}/>
+          {members.map(m=><PersonNode key={m.id} m={m} onTap={tapCard}/>)}
         </g>
       </svg>
     </div>
