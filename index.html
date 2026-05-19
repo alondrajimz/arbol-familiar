@@ -100,10 +100,11 @@ function autoLayout(members){
     }));
     // Siblings → same gen (max = deepest sibling's row, keeps all on one row)
     const sibs={};
-    m.forEach(x=>[x.parent1Id,x.parent2Id].filter(Boolean).forEach(pid=>{
-      if(!sibs[pid])sibs[pid]=[];
-      if(!sibs[pid].includes(x.id))sibs[pid].push(x.id);
-    }));
+    m.forEach(x=>{
+      const fk=famKey(x);
+      if(!sibs[fk])sibs[fk]=[];
+      sibs[fk].push(x.id);
+    });
     Object.values(sibs).forEach(ids=>{
       const parentGens=ids.map(id=>{const x=byId[id];const gs=[x.parent1Id,x.parent2Id].filter(Boolean).map(p=>gen[p]).filter(g=>g!=null);return gs.length?Math.max(...gs)+1:gen[id]??0;});
       const targetG=Math.max(...parentGens);
