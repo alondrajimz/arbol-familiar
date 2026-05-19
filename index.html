@@ -1283,11 +1283,16 @@ function App(){
     return families.sort((a,b)=>a.name.localeCompare(b.name));
   }
   function getDescendants(id){const kids=members.filter(m=>m.parent1Id===id||m.parent2Id===id).map(m=>m.id);return kids.flatMap(kid=>[kid,...getDescendants(kid)]);}
+  function getDescendantsOf(id1,id2){
+    // Only children where BOTH id1 and id2 are parents, then recurse freely from those children
+    const directKids=members.filter(m=>(m.parent1Id===id1&&m.parent2Id===id2)||(m.parent1Id===id2&&m.parent2Id===id1)).map(m=>m.id);
+    return directKids.flatMap(kid=>[kid,...getDescendants(kid)]);
+  }
   const displayedMembers=familyView==="general"?members:(()=>{
     const fam=getFamilies().find(f=>f.id===familyView);
     if(!fam)return members;
     const core=[fam.founderId1,fam.founderId2];
-    const desc=[...new Set([...getDescendants(fam.founderId1),...getDescendants(fam.founderId2)])];
+    const desc=[...new Set(getDescendantsOf(fam.founderId1,fam.founderId2))];
     const partners=desc.flatMap(id=>{const m=members.find(x=>x.id===id);return m?parsePartners(m.partnerships).map(p=>p.partnerId):[];});
     const allIds=new Set([...core,...desc,...partners]);
     return members.filter(m=>allIds.has(m.id));
