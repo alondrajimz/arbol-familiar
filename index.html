@@ -555,11 +555,11 @@ function PetModal({ownerId,pet,onSave,onClose}){
           </div>
         </div>}
         <Toggle value={pf.gender==="F"} onChange={v=>setPf({...pf,gender:v?"F":"M"})} labelA="Macho" labelB="Hembra"/>
-        <Inp value={pf.name} onChange={v=>setPf({...pf,name:v})} placeholder="Nombre"/>
-        <Inp value={pf.type||""} onChange={v=>setPf({...pf,type:v})} placeholder="Raza / tipo"/>
-        <Inp value={pf.birthDate||""} onChange={v=>setPf({...pf,birthDate:v})} placeholder="Fecha nacimiento" type="date"/>
+        <Inp value={pf.name} onChange={e=>setPf({...pf,name:e.target.value})} placeholder="Nombre"/>
+        <Inp value={pf.type||""} onChange={e=>setPf({...pf,type:e.target.value})} placeholder="Raza / tipo"/>
+        <Inp value={pf.birthDate||""} onChange={e=>setPf({...pf,birthDate:e.target.value})} placeholder="Fecha nacimiento" type="date"/>
         <Toggle value={!!pf.deceased} onChange={v=>setPf({...pf,deceased:v})} labelA="Vivo" labelB="Fallecido"/>
-        {pf.deceased&&<Inp value={pf.deathDate||""} onChange={v=>setPf({...pf,deathDate:v})} placeholder="Fecha fallecimiento" type="date"/>}
+        {pf.deceased&&<Inp value={pf.deathDate||""} onChange={e=>setPf({...pf,deathDate:e.target.value})} placeholder="Fecha fallecimiento" type="date"/>}
         <button type="button" onClick={save} style={{width:"100%",marginTop:8,padding:"14px 0",background:"#007AFF",border:"none",borderRadius:12,color:"#fff",fontSize:17,fontWeight:600,cursor:"pointer"}}>Guardar mascota</button>
       </div>
     </div>
