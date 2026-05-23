@@ -349,7 +349,7 @@ function PersonNode({m,onTap}){
         <div style={{fontSize:11,color:"#999",height:16}}>{age!==null?`${age} años`:""}</div>
         {pets.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:2,justifyContent:"center",padding:"3px 4px",marginTop:2,background:"rgba(120,120,128,0.07)",borderRadius:6}}>
           {pets.slice(0,3).map(p=><div key={p.id} style={{display:"flex",alignItems:"center",gap:2,background:"rgba(120,120,128,0.12)",borderRadius:8,padding:"1px 5px",fontSize:10,color:"#555"}}>
-            {p.photo?<img src={p.photo} style={{width:14,height:14,borderRadius:7,objectFit:"cover"}}/>:<span>{p.deceased?"🕊️":"🐾"}</span>}
+            {p.photo?<img src={p.photo} style={{width:14,height:14,borderRadius:7,objectFit:"cover"}}/>:<span>{p.deceased?"🕊️":(speciesEmoji[p.species]||"🐾")}</span>}
             <span style={{maxWidth:32,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
           </div>)}
           {pets.length>3&&<span style={{fontSize:10,color:"#888"}}>+{pets.length-3}</span>}
@@ -515,8 +515,11 @@ function PhotoUpload({photo,gender,name,onUp}){
   </>;
 }
 
+const SPECIES_LIST=["Perro","Gato","Ave","Pez","Conejo","Hámster","Tortuga","Otro"];
+const speciesEmoji={Perro:"🐕",Gato:"🐈",Ave:"🦜",Pez:"🐠",Conejo:"🐰",Hámster:"🐹",Tortuga:"🐢",Otro:"🐾"};
+function migratePet(p){if(!p)return{id:genId(),name:"",photo:null,species:"Perro",breed:"",gender:"M",birthDate:"",deceased:false,deathDate:""};if(!p.species&&p.type)return{...p,species:"Perro",breed:p.type};if(!p.species)return{...p,species:"Perro",breed:p.breed||""};return p;}
 function PetModal({ownerId,pet,onSave,onClose}){
-  const [pf,setPf]=useState(pet||{id:genId(),name:"",photo:null,gender:"M",type:"",birthDate:"",deceased:false,deathDate:""});
+  const [pf,setPf]=useState(()=>migratePet(pet));
   const [cropSrc,setCropSrc]=useState(null);
   const imgRef=useRef(null);
   const cropperRef=useRef(null);
@@ -554,9 +557,12 @@ function PetModal({ownerId,pet,onSave,onClose}){
             <button type="button" onClick={()=>{if(!cropperRef.current)return;const c=cropperRef.current.getCroppedCanvas({width:200,height:200});setPf({...pf,photo:c.toDataURL("image/jpeg",0.8)});setCropSrc(null);}} style={{padding:"12px 28px",borderRadius:12,border:"none",background:"#007AFF",color:"#fff",fontSize:16,cursor:"pointer"}}>Usar foto</button>
           </div>
         </div>}
+        <Sel value={pf.species||"Perro"} onChange={e=>setPf({...pf,species:e.target.value})}>
+          {SPECIES_LIST.map(s=><option key={s} value={s}>{speciesEmoji[s]} {s}</option>)}
+        </Sel>
         <Toggle value={pf.gender==="F"} onChange={v=>setPf({...pf,gender:v?"F":"M"})} labelA="Macho" labelB="Hembra"/>
         <Inp value={pf.name} onChange={e=>setPf({...pf,name:e.target.value})} placeholder="Nombre"/>
-        <Inp value={pf.type||""} onChange={e=>setPf({...pf,type:e.target.value})} placeholder="Raza / tipo"/>
+        <Inp value={pf.breed||""} onChange={e=>setPf({...pf,breed:e.target.value})} placeholder="Raza (opcional)"/>
         <Inp value={pf.birthDate||""} onChange={e=>setPf({...pf,birthDate:e.target.value})} placeholder="Fecha nacimiento" type="date"/>
         <Toggle value={!!pf.deceased} onChange={v=>setPf({...pf,deceased:v})} labelA="Vivo" labelB="Fallecido"/>
         {pf.deceased&&<Inp value={pf.deathDate||""} onChange={e=>setPf({...pf,deathDate:e.target.value})} placeholder="Fecha fallecimiento" type="date"/>}
@@ -1547,8 +1553,8 @@ function App(){
           {(selM.pets||[]).map(p=><div key={p.id} style={{display:"flex",alignItems:"center",gap:10}}>
             <Avatar photo={p.photo} name={p.name||"?"} size={40} gender={p.gender} deceased={p.deceased}/>
             <div style={{flex:1}}>
-              <div style={{fontWeight:600,fontSize:15}}>{p.deceased?"🕊️":"🐾"} {p.name}</div>
-              {p.type&&<div style={{fontSize:12,color:"#888"}}>{p.type}</div>}
+              <div style={{fontWeight:600,fontSize:15}}>{p.deceased?"🕊️":(speciesEmoji[p.species]||"🐾")} {p.name}</div>
+              {(p.species||p.breed)&&<div style={{fontSize:12,color:"#888"}}>{[p.species,p.breed].filter(Boolean).join(" · ")}</div>}
               {calcAge(p.birthDate,p.deceased?p.deathDate:null)!==null&&<div style={{fontSize:12,color:"#888"}}>{calcAge(p.birthDate,p.deceased?p.deathDate:null)} años</div>}
             </div>
           </div>)}
@@ -1648,7 +1654,7 @@ function App(){
       {(form.pets||[]).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,padding:"0 14px 8px"}}>
         {(form.pets||[]).map((p,i)=><div key={p.id} style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"0.5px solid rgba(60,60,67,0.2)",borderRadius:100,padding:"4px 10px 4px 4px",cursor:"pointer"}} onClick={()=>setPetModal({ownerId:sel||"new",pet:p,idx:i})}>
           {p.photo?<img src={p.photo} style={{width:25,height:25,borderRadius:12.5,objectFit:"cover"}}/>:<Avatar photo={null} name={p.name||"?"} size={25} gender={p.gender}/>}
-          <span style={{fontSize:13}}>{p.deceased?"🕊️":"🐾"} {p.name}</span>
+          <span style={{fontSize:13}}>{p.deceased?"🕊️":(speciesEmoji[p.species]||"🐾")} {p.name}</span>
           {calcAge(p.birthDate,p.deceased?p.deathDate:null)!==null&&<span style={{fontSize:11,color:"#888"}}>{calcAge(p.birthDate,p.deceased?p.deathDate:null)}a</span>}
           <span onClick={e=>{e.stopPropagation();setForm({...form,pets:(form.pets||[]).filter((_,j)=>j!==i)});}} style={{cursor:"pointer",color:"#FF3B30",fontWeight:700,marginLeft:2}}>×</span>
         </div>)}
