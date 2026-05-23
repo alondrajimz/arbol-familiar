@@ -537,7 +537,7 @@ function PetModal({ownerId,pet,onSave,onClose}){
     <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:401,background:"#F2F2F7",borderRadius:"14px 14px 0 0",maxHeight:"90vh",overflowY:"auto",paddingBottom:"env(safe-area-inset-bottom,20px)"}}>
       <div style={{display:"flex",justifyContent:"center",padding:"10px 0 2px"}}><div style={{width:36,height:5,borderRadius:3,background:"rgba(60,60,67,0.15)"}}/></div>
       <div style={{display:"flex",justifyContent:"space-between",padding:"6px 20px 10px"}}>
-        <button onClick={onClose} style={{background:"none",border:"none",color:"#007AFF",fontSize:17,cursor:"pointer"}}>Cancelar</button>
+        <button type="button" onClick={onClose} style={{background:"none",border:"none",color:"#007AFF",fontSize:17,cursor:"pointer"}}>Cancelar</button>
         <span style={{fontSize:17,fontWeight:600}}>Mascota</span>
         <div style={{width:60}}/>
       </div>
@@ -550,8 +550,8 @@ function PetModal({ownerId,pet,onSave,onClose}){
         {cropSrc&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:410,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,padding:20}}>
           <div style={{maxWidth:320,width:"100%",maxHeight:"60vh",overflow:"hidden"}}><img ref={imgRef} src={cropSrc} style={{maxWidth:"100%",display:"block"}}/></div>
           <div style={{display:"flex",gap:12}}>
-            <button onClick={()=>setCropSrc(null)} style={{padding:"12px 28px",borderRadius:12,border:"none",background:"rgba(255,255,255,0.15)",color:"#fff",fontSize:16,cursor:"pointer"}}>Cancelar</button>
-            <button onClick={()=>{if(!cropperRef.current)return;const c=cropperRef.current.getCroppedCanvas({width:200,height:200});setPf({...pf,photo:c.toDataURL("image/jpeg",0.8)});setCropSrc(null);}} style={{padding:"12px 28px",borderRadius:12,border:"none",background:"#007AFF",color:"#fff",fontSize:16,cursor:"pointer"}}>Usar foto</button>
+            <button type="button" onClick={()=>setCropSrc(null)} style={{padding:"12px 28px",borderRadius:12,border:"none",background:"rgba(255,255,255,0.15)",color:"#fff",fontSize:16,cursor:"pointer"}}>Cancelar</button>
+            <button type="button" onClick={()=>{if(!cropperRef.current)return;const c=cropperRef.current.getCroppedCanvas({width:200,height:200});setPf({...pf,photo:c.toDataURL("image/jpeg",0.8)});setCropSrc(null);}} style={{padding:"12px 28px",borderRadius:12,border:"none",background:"#007AFF",color:"#fff",fontSize:16,cursor:"pointer"}}>Usar foto</button>
           </div>
         </div>}
         <Toggle value={pf.gender==="F"} onChange={v=>setPf({...pf,gender:v?"F":"M"})} labelA="Macho" labelB="Hembra"/>
@@ -560,7 +560,7 @@ function PetModal({ownerId,pet,onSave,onClose}){
         <Inp value={pf.birthDate||""} onChange={v=>setPf({...pf,birthDate:v})} placeholder="Fecha nacimiento" type="date"/>
         <Toggle value={!!pf.deceased} onChange={v=>setPf({...pf,deceased:v})} labelA="Vivo" labelB="Fallecido"/>
         {pf.deceased&&<Inp value={pf.deathDate||""} onChange={v=>setPf({...pf,deathDate:v})} placeholder="Fecha fallecimiento" type="date"/>}
-        <button onClick={save} style={{width:"100%",marginTop:8,padding:"14px 0",background:"#007AFF",border:"none",borderRadius:12,color:"#fff",fontSize:17,fontWeight:600,cursor:"pointer"}}>Guardar mascota</button>
+        <button type="button" onClick={save} style={{width:"100%",marginTop:8,padding:"14px 0",background:"#007AFF",border:"none",borderRadius:12,color:"#fff",fontSize:17,fontWeight:600,cursor:"pointer"}}>Guardar mascota</button>
       </div>
     </div>
   </>;
