@@ -299,6 +299,13 @@ async function uploadEventPhoto(eventId,photoId,base64){
   const res=await fetch("https://api.cloudinary.com/v1_1/dm0fstth3/image/upload",{method:"POST",body:fd});
   return (await res.json()).secure_url;
 }
+async function uploadPetPhoto(ownerId,petId,base64){
+  const blob=await fetch(base64).then(r=>r.blob());
+  const fd=new FormData();fd.append("file",blob);fd.append("upload_preset","vsku3vni");
+  fd.append("public_id","family/"+ownerId+"/pet-"+petId);
+  const res=await fetch("https://api.cloudinary.com/v1_1/dm0fstth3/image/upload",{method:"POST",body:fd});
+  return(await res.json()).secure_url;
+}
 function stripPhotos(members){
   // keep URL photos in DB; only strip base64 (large, shouldn't be in DB)
   return members.map(m=>{
@@ -329,8 +336,10 @@ function PersonNode({m,onTap}){
   const d=getDisplay(m);
   const age=calcAge(m.birthDate,m.deceased?m.deathDate:null);
   const txt={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 4px"};
+  const pets=m.pets||[];
+  const cardH=pets.length>0?152:130;
   return (
-    <foreignObject key={m.id} x={m.x-75} y={m.y-55} width={150} height={130}>
+    <foreignObject key={m.id} x={m.x-75} y={m.y-55} width={150} height={cardH}>
       <div className="person-card" onClick={()=>onTap(m.id)} style={{textAlign:"center",cursor:"pointer",padding:"4px 0",overflow:"hidden"}}>
         <Avatar photo={m.photo} name={d.full} size={70} gender={m.gender} deceased={m.deceased}/>
         <div style={{marginTop:4,fontSize:14,fontWeight:700,color:m.deceased?"#888":"#000",height:18,...txt}}>
@@ -338,6 +347,13 @@ function PersonNode({m,onTap}){
         </div>
         <div style={{fontSize:11,color:"#666",height:16,...txt}}>{d.last||""}</div>
         <div style={{fontSize:11,color:"#999",height:16}}>{age!==null?`${age} años`:""}</div>
+        {pets.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:2,justifyContent:"center",padding:"3px 4px",marginTop:2,background:"rgba(120,120,128,0.07)",borderRadius:6}}>
+          {pets.slice(0,3).map(p=><div key={p.id} style={{display:"flex",alignItems:"center",gap:2,background:"rgba(120,120,128,0.12)",borderRadius:8,padding:"1px 5px",fontSize:10,color:"#555"}}>
+            {p.photo?<img src={p.photo} style={{width:14,height:14,borderRadius:7,objectFit:"cover"}}/>:<span>{p.deceased?"🕊️":"🐾"}</span>}
+            <span style={{maxWidth:32,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+          </div>)}
+          {pets.length>3&&<span style={{fontSize:10,color:"#888"}}>+{pets.length-3}</span>}
+        </div>}
       </div>
     </foreignObject>
   );
@@ -496,6 +512,57 @@ function PhotoUpload({photo,gender,name,onUp}){
         <button onClick={confirm} style={{padding:"12px 28px",borderRadius:12,border:"none",background:"#007AFF",color:"#fff",fontSize:16,fontWeight:600,cursor:"pointer"}}>Usar foto</button>
       </div>
     </div>}
+  </>;
+}
+
+function PetModal({ownerId,pet,onSave,onClose}){
+  const [pf,setPf]=useState(pet||{id:genId(),name:"",photo:null,gender:"M",type:"",birthDate:"",deceased:false,deathDate:""});
+  const [cropSrc,setCropSrc]=useState(null);
+  const imgRef=useRef(null);
+  const cropperRef=useRef(null);
+  const inpRef=useRef(null);
+  useEffect(()=>{
+    if(!cropSrc||!imgRef.current)return;
+    cropperRef.current=new Cropper(imgRef.current,{aspectRatio:1,viewMode:1,autoCropArea:1,movable:true,zoomable:true,rotatable:false,scalable:false});
+    return()=>{cropperRef.current?.destroy();cropperRef.current=null;};
+  },[cropSrc]);
+  const save=async()=>{
+    if(!pf.name.trim())return;
+    let photo=pf.photo;
+    if(photo&&photo.startsWith("data:")){try{photo=await uploadPetPhoto(ownerId,pf.id,photo);}catch(e){console.error(e);}}
+    onSave({...pf,photo,ownerId});
+  };
+  return <>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400}}/>
+    <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:401,background:"#F2F2F7",borderRadius:"14px 14px 0 0",maxHeight:"90vh",overflowY:"auto",paddingBottom:"env(safe-area-inset-bottom,20px)"}}>
+      <div style={{display:"flex",justifyContent:"center",padding:"10px 0 2px"}}><div style={{width:36,height:5,borderRadius:3,background:"rgba(60,60,67,0.15)"}}/></div>
+      <div style={{display:"flex",justifyContent:"space-between",padding:"6px 20px 10px"}}>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"#007AFF",fontSize:17,cursor:"pointer"}}>Cancelar</button>
+        <span style={{fontSize:17,fontWeight:600}}>Mascota</span>
+        <div style={{width:60}}/>
+      </div>
+      <div style={{padding:"0 20px 24px",display:"flex",flexDirection:"column",gap:8}}>
+        <div onClick={()=>inpRef.current?.click()} style={{textAlign:"center",cursor:"pointer",padding:8}}>
+          <Avatar photo={pf.photo} name={pf.name||"?"} size={70} gender={pf.gender}/>
+          <div style={{color:"#007AFF",fontSize:13,fontWeight:500,marginTop:4}}>{pf.photo?"Cambiar foto":"Agregar foto"}</div>
+          <input ref={inpRef} type="file" accept="image/*" onChange={e=>{const f=e.target.files?.[0];if(!f)return;e.target.value="";const r=new FileReader();r.onload=ev=>setCropSrc(ev.target.result);r.readAsDataURL(f);}} style={{display:"none"}}/>
+        </div>
+        {cropSrc&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:410,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,padding:20}}>
+          <div style={{maxWidth:320,width:"100%",maxHeight:"60vh",overflow:"hidden"}}><img ref={imgRef} src={cropSrc} style={{maxWidth:"100%",display:"block"}}/></div>
+          <div style={{display:"flex",gap:12}}>
+            <button onClick={()=>setCropSrc(null)} style={{padding:"12px 28px",borderRadius:12,border:"none",background:"rgba(255,255,255,0.15)",color:"#fff",fontSize:16,cursor:"pointer"}}>Cancelar</button>
+            <button onClick={()=>{if(!cropperRef.current)return;const c=cropperRef.current.getCroppedCanvas({width:200,height:200});setPf({...pf,photo:c.toDataURL("image/jpeg",0.8)});setCropSrc(null);}} style={{padding:"12px 28px",borderRadius:12,border:"none",background:"#007AFF",color:"#fff",fontSize:16,cursor:"pointer"}}>Usar foto</button>
+          </div>
+        </div>}
+        <Toggle value={pf.gender==="F"} onChange={v=>setPf({...pf,gender:v?"F":"M"})} labelA="Macho" labelB="Hembra"/>
+        <Inp value={pf.name} onChange={v=>setPf({...pf,name:v})} placeholder="Nombre"/>
+        <Inp value={pf.type||""} onChange={v=>setPf({...pf,type:v})} placeholder="Raza / tipo"/>
+        <Inp value={pf.birthDate||""} onChange={v=>setPf({...pf,birthDate:v})} placeholder="Fecha nacimiento" type="date"/>
+        <Toggle value={!!pf.deceased} onChange={v=>setPf({...pf,deceased:v})} labelA="Vivo" labelB="Fallecido"/>
+        {pf.deceased&&<Inp value={pf.deathDate||""} onChange={v=>setPf({...pf,deathDate:v})} placeholder="Fecha fallecimiento" type="date"/>}
+        <button onClick={save} style={{width:"100%",marginTop:8,padding:"14px 0",background:"#007AFF",border:"none",borderRadius:12,color:"#fff",fontSize:17,fontWeight:600,cursor:"pointer"}}>Guardar mascota</button>
+      </div>
+    </div>
   </>;
 }
 
@@ -961,6 +1028,7 @@ function App(){
   const [logs,setLogs]=useState([]);
   const [photoView,setPhotoView]=useState(null); // {photos,idx}
   const [addPhotoFor,setAddPhotoFor]=useState(null); // memberId
+  const [petModal,setPetModal]=useState(null); // {ownerId, pet, idx}
   const [events,setEvents]=useState([]);
   const [showAddEvent,setShowAddEvent]=useState(false);
   const [viewEvent,setViewEvent]=useState(null);
@@ -989,7 +1057,7 @@ function App(){
         if(!maritalStatus){
           maritalStatus=partnerships.find(p=>p.type==="actual")?"casado":"soltero";
         }
-        return {...v,id:v.id||k,partnerships,maritalStatus,photo:v.photo||null};
+        return {...v,id:v.id||k,partnerships,maritalStatus,photo:v.photo||null,pets:v.pets||[]};
       });
       setMembers(autoLayout(arr));
       setLoading(false);
@@ -1042,7 +1110,7 @@ function App(){
 
   // Open panels
   const tapCard=id=>{setSel(id);setPanel("view");};
-  const openAdd=()=>{setForm({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",maritalStatus:"soltero",deceased:false,deathDate:"",deathPlace:"",residence:"",phone:"",email:"",facebook:"",instagram:"",parent1Id:"",parent2Id:"",partnerIdNew:"",hijos:[],photo:null});setPanel("add");};
+  const openAdd=()=>{setForm({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",maritalStatus:"soltero",deceased:false,deathDate:"",deathPlace:"",residence:"",phone:"",email:"",facebook:"",instagram:"",parent1Id:"",parent2Id:"",partnerIdNew:"",hijos:[],photo:null,pets:[]});setPanel("add");};
   const openEdit=()=>{if(!selM)return;const hijos=members.filter(m=>m.parent1Id===sel||m.parent2Id===sel).map(m=>m.id);setForm({...selM,partnerIdNew:"",hijos});setPanel("edit");};
   const openPartners=()=>{if(!selM)return;setPForm({partnerId:"",type:"actual"});setPanel("partners");};
 
@@ -1057,7 +1125,9 @@ function App(){
     if(photo&&photo.startsWith("data:")){
       try{photo=await uploadPhoto(targetId,photo);}catch(e){console.error("upload error",e);}
     }
-    const fdata={...form,photo};
+    let pets=form.pets||[];
+    if(pets.length){pets=await Promise.all(pets.map(async p=>{if(p.photo&&p.photo.startsWith("data:")){try{const url=await uploadPetPhoto(targetId,p.id,p.photo);return{...p,photo:url};}catch(e){console.error(e);}}return p;}));}
+    const fdata={...form,photo,pets};
     if(panel==="add"){
       const ps=fdata.partnerIdNew?[{partnerId:fdata.partnerIdNew,type:"actual"}]:[];
       const n={...fdata,id:targetId,partnerships:ps};
@@ -1323,6 +1393,9 @@ function App(){
   return <div style={{width:"100%",height:"100vh",background:"#F2F2F7",display:"flex",flexDirection:"column",overflow:"hidden"}}>
     {toast&&<div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:400,background:"rgba(0,0,0,.75)",color:"#fff",padding:"10px 24px",borderRadius:100,fontSize:14,fontWeight:500,animation:"fadeIn .25s ease"}}>{toast}</div>}
 
+    {/* Global PetModal */}
+    {petModal&&<PetModal ownerId={petModal.ownerId||sel||"new"} pet={petModal.pet} onSave={p=>{const idx=petModal.idx;const pets=form.pets||[];setForm({...form,pets:idx>=0?pets.map((x,i)=>i===idx?p:x):[...pets,p]});setPetModal(null);}} onClose={()=>setPetModal(null)}/>}
+
     {/* Global editPartner modal — works from any panel */}
     {editPartner&&(()=>{
       const ep=members.find(m=>m.id===editPartner.partnerId);if(!ep)return null;
@@ -1468,6 +1541,19 @@ function App(){
           </div>
         </div>;
       })()}
+      {(selM.pets||[]).length>0&&<div style={{background:"#fff",borderRadius:12,overflow:"hidden",padding:"10px 14px"}}>
+        <div style={{fontSize:12,color:"rgba(60,60,67,0.6)",fontWeight:500,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Mascotas</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {(selM.pets||[]).map(p=><div key={p.id} style={{display:"flex",alignItems:"center",gap:10}}>
+            <Avatar photo={p.photo} name={p.name||"?"} size={40} gender={p.gender} deceased={p.deceased}/>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:600,fontSize:15}}>{p.deceased?"🕊️":"🐾"} {p.name}</div>
+              {p.type&&<div style={{fontSize:12,color:"#888"}}>{p.type}</div>}
+              {calcAge(p.birthDate,p.deceased?p.deathDate:null)!==null&&<div style={{fontSize:12,color:"#888"}}>{calcAge(p.birthDate,p.deceased?p.deathDate:null)} años</div>}
+            </div>
+          </div>)}
+        </div>
+      </div>}
       {(selM.phone||selM.email||selM.facebook||selM.instagram)&&<div style={{display:"flex",justifyContent:"center",gap:12,padding:8}}>
         {selM.phone&&<a href={`tel:${selM.phone}`} style={{width:44,height:44,borderRadius:22,background:"#34C759",display:"flex",alignItems:"center",justifyContent:"center"}}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.07 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3 2.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
@@ -1558,6 +1644,16 @@ function App(){
           return true;
         }).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
       </Sel>
+      <SecTitle>Mascotas</SecTitle>
+      {(form.pets||[]).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,padding:"0 14px 8px"}}>
+        {(form.pets||[]).map((p,i)=><div key={p.id} style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:"0.5px solid rgba(60,60,67,0.2)",borderRadius:100,padding:"4px 10px 4px 4px",cursor:"pointer"}} onClick={()=>setPetModal({ownerId:sel||"new",pet:p,idx:i})}>
+          {p.photo?<img src={p.photo} style={{width:25,height:25,borderRadius:12.5,objectFit:"cover"}}/>:<Avatar photo={null} name={p.name||"?"} size={25} gender={p.gender}/>}
+          <span style={{fontSize:13}}>{p.deceased?"🕊️":"🐾"} {p.name}</span>
+          {calcAge(p.birthDate,p.deceased?p.deathDate:null)!==null&&<span style={{fontSize:11,color:"#888"}}>{calcAge(p.birthDate,p.deceased?p.deathDate:null)}a</span>}
+          <span onClick={e=>{e.stopPropagation();setForm({...form,pets:(form.pets||[]).filter((_,j)=>j!==i)});}} style={{cursor:"pointer",color:"#FF3B30",fontWeight:700,marginLeft:2}}>×</span>
+        </div>)}
+      </div>}
+      <button onClick={()=>setPetModal({ownerId:sel||"new",pet:null,idx:-1})} style={{marginLeft:14,marginBottom:8,padding:"6px 14px",background:"rgba(120,120,128,0.1)",border:"none",borderRadius:100,fontSize:13,cursor:"pointer",color:"#007AFF"}}>+ Agregar mascota</button>
       <button onClick={saveForm} style={{width:"100%",marginTop:16,padding:"14px 0",background:"#007AFF",border:"none",borderRadius:12,color:"#fff",fontSize:17,fontWeight:600,cursor:"pointer"}}>
         {panel==="add"?"Agregar":"Guardar cambios"}
       </button>
