@@ -1116,7 +1116,7 @@ function App(){
 
   // Open panels
   const tapCard=id=>{setSel(id);setPanel("view");};
-  const openAdd=()=>{setForm({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",maritalStatus:"soltero",deceased:false,deathDate:"",deathPlace:"",residence:"",phone:"",email:"",facebook:"",instagram:"",parent1Id:"",parent2Id:"",partnerIdNew:"",hijos:[],photo:null,pets:[]});setPanel("add");};
+  const openAdd=()=>{setSel(null);setForm({firstName:"",lastName1:"",lastName2:"",birthDate:"",birthPlace:"",gender:"M",maritalStatus:"soltero",deceased:false,deathDate:"",deathPlace:"",residence:"",phone:"",email:"",facebook:"",instagram:"",parent1Id:"",parent2Id:"",partnerIdNew:"",hijos:[],photo:null,pets:[]});setPanel("add");};
   const openEdit=()=>{if(!selM)return;const hijos=members.filter(m=>m.parent1Id===sel||m.parent2Id===sel).map(m=>m.id);setForm({...selM,partnerIdNew:"",hijos});setPanel("edit");};
   const openPartners=()=>{if(!selM)return;setPForm({partnerId:"",type:"actual"});setPanel("partners");};
 
@@ -1137,10 +1137,19 @@ function App(){
     if(panel==="add"){
       const ps=fdata.partnerIdNew?[{partnerId:fdata.partnerIdNew,type:"actual"}]:[];
       const n={...fdata,id:targetId,partnerships:ps};
+      const hijosToLink=fdata.hijos||[];
       update(p=>{
-        const next=[...p,n];
-        if(!fdata.partnerIdNew)return next;
-        return next.map(m=>m.id===fdata.partnerIdNew&&!m.partnerships.find(x=>x.partnerId===targetId)?{...m,partnerships:[...m.partnerships,{partnerId:targetId,type:"actual"}]}:m);
+        let next=[...p,n];
+        if(fdata.partnerIdNew)
+          next=next.map(m=>m.id===fdata.partnerIdNew&&!m.partnerships.find(x=>x.partnerId===targetId)?{...m,partnerships:[...m.partnerships,{partnerId:targetId,type:"actual"}]}:m);
+        if(hijosToLink.length)
+          next=next.map(m=>{
+            if(!hijosToLink.includes(m.id))return m;
+            if(!m.parent1Id||m.parent1Id===targetId)return{...m,parent1Id:targetId};
+            if(!m.parent2Id||m.parent2Id===targetId)return{...m,parent2Id:targetId};
+            return m;
+          });
+        return next;
       });
       if(!familyRoot)saveRoot(targetId);
     } else {
