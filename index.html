@@ -398,7 +398,7 @@ function TreeLines({members}){
     const sorted=[...children].sort((a,b)=>a.x-b.x);
     const minX=sorted[0].x, maxX=sorted[sorted.length-1].x;
     const centerX=(minX+maxX)/2;
-    const barY=children[0].y-55;
+    const barY=children[0].y-80;
     const childTopY=children[0].y-51;
 
     // 1. Vertical from couple center down to elbow level
