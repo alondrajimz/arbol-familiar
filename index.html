@@ -1342,7 +1342,7 @@ function App(){
   const svgW=members.length?Math.max(...allX)+200:800;
   const svgH=members.length?Math.max(...allY)+200:600;
 
-  const fit=()=>{if(!members.length)return;const xs=members.map(m=>m.x);const ys=members.map(m=>m.y);const tw=Math.max(...xs)-Math.min(...xs)+300;const th=Math.max(...ys)-Math.min(...ys)+300;const vw=window.innerWidth;const vh=window.innerHeight-60;setZoom(Math.min(vw/tw,vh/th,1));};
+  const fit=()=>{const nodes=displayedMembers;if(!nodes.length)return;const xs=nodes.map(m=>m.x),ys=nodes.map(m=>m.y);const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);const vw=window.innerWidth,vh=window.innerHeight-60;const z=Math.min(vw/(maxX-minX+300),vh/(maxY-minY+300),1);setZoom(z);requestAnimationFrame(()=>{if(!canvasRef.current)return;canvasRef.current.scrollTo({left:Math.max(0,(minX+maxX)/2*z-vw/2),top:Math.max(0,(minY+maxY)/2*z-vh/2),behavior:"smooth"});});};
   useEffect(()=>{if(members.length>0){const xs=members.map(m=>m.x);const ys=members.map(m=>m.y);const tw=Math.max(...xs)-Math.min(...xs)+300;const th=Math.max(...ys)-Math.min(...ys)+300;const vw=window.innerWidth;const vh=window.innerHeight-60;setZoom(Math.min(vw/tw,vh/th,1));}},[members.length]);
   useEffect(()=>{
     if(!familyRoot||!members.length||!canvasRef.current)return;
