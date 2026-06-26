@@ -458,6 +458,44 @@ function Sel({value,onChange,children}){
     borderBottom:"0.5px solid rgba(60,60,67,0.12)",
     color:"#000",fontSize:16,outline:"none",boxSizing:"border-box",appearance:"none"}}>{children}</select>;
 }
+function ParentSearch({value,onChange,members,placeholder,exclude}){
+  const [query,setQuery]=React.useState("");
+  const [open,setOpen]=React.useState(false);
+  const ref=React.useRef(null);
+  const selMem=members.find(m=>m.id===value);
+  const selName=selMem?getDisplay(selMem).full:"";
+  React.useEffect(()=>{if(!value)setQuery("");},[value]);
+  React.useEffect(()=>{
+    const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+    document.addEventListener("mousedown",h);
+    return()=>document.removeEventListener("mousedown",h);
+  },[]);
+  const filtered=members.filter(m=>{
+    if(exclude&&exclude.includes(m.id))return false;
+    if(!query)return true;
+    return getDisplay(m).full.toLowerCase().includes(query.toLowerCase());
+  });
+  const select=id=>{onChange({target:{value:id}});setQuery("");setOpen(false);};
+  const clear=()=>{onChange({target:{value:""}});setQuery("");setOpen(false);};
+  return <div ref={ref} style={{position:"relative",borderBottom:"0.5px solid rgba(60,60,67,0.12)"}}>
+    <div style={{display:"flex",alignItems:"center",background:"#fff",padding:"0 14px"}}>
+      <input value={open?query:selName} placeholder={placeholder}
+        onFocus={()=>{setOpen(true);setQuery("");}}
+        onChange={e=>{setQuery(e.target.value);setOpen(true);}}
+        style={{flex:1,padding:"11px 0",border:"none",fontSize:16,outline:"none",background:"transparent",color:"#000"}}/>
+      {value?<button onClick={clear} style={{background:"none",border:"none",padding:"4px 0",cursor:"pointer",color:"rgba(60,60,67,0.35)",fontSize:18,lineHeight:1}}>✕</button>
+        :<span style={{color:"rgba(60,60,67,0.3)",fontSize:14,pointerEvents:"none"}}>▾</span>}
+    </div>
+    {open&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",boxShadow:"0 4px 20px rgba(0,0,0,0.15)",borderRadius:"0 0 10px 10px",maxHeight:220,overflowY:"auto",zIndex:200}}>
+      <div onClick={clear} style={{padding:"11px 14px",fontSize:16,color:"rgba(60,60,67,0.45)",cursor:"pointer",borderBottom:"0.5px solid rgba(60,60,67,0.08)"}}>— Ninguno —</div>
+      {filtered.length===0&&<div style={{padding:"11px 14px",fontSize:14,color:"rgba(60,60,67,0.4)"}}>Sin resultados</div>}
+      {filtered.map(m=><div key={m.id} onClick={()=>select(m.id)}
+        style={{padding:"11px 14px",fontSize:16,cursor:"pointer",borderBottom:"0.5px solid rgba(60,60,67,0.06)",background:m.id===value?"#F0F4FF":"#fff",fontWeight:m.id===value?600:400}}>
+        {getDisplay(m).full}
+      </div>)}
+    </div>}
+  </div>;
+}
 function SecTitle({children}){
   return <div style={{color:"rgba(60,60,67,0.6)",fontSize:12,fontWeight:500,padding:"16px 14px 6px",textTransform:"uppercase",letterSpacing:.5}}>{children}</div>;
 }
@@ -1640,14 +1678,14 @@ function App(){
         <Inp value={form.deathPlace} onChange={e=>setForm({...form,deathPlace:e.target.value})} placeholder="Lugar donde descansan sus restos"/>
       </>}
       <SecTitle>Padres</SecTitle>
-      <Sel value={form.parent1Id} onChange={e=>setForm({...form,parent1Id:e.target.value})}>
-        <option value="">Padre/Madre 1 — Ninguno</option>
-        {members.filter(m=>m.id!==sel&&(!form.birthDate||!m.birthDate||m.birthDate<form.birthDate||m.deceased)).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
-      </Sel>
-      <Sel value={form.parent2Id} onChange={e=>setForm({...form,parent2Id:e.target.value})}>
-        <option value="">Padre/Madre 2 — Ninguno</option>
-        {members.filter(m=>m.id!==sel&&m.id!==form.parent1Id&&(!form.birthDate||!m.birthDate||m.birthDate<form.birthDate||m.deceased)).map(m=><option key={m.id} value={m.id}>{getDisplay(m).full}</option>)}
-      </Sel>
+      <div style={{color:"rgba(60,60,67,0.6)",fontSize:12,padding:"4px 14px 0"}}>Padre</div>
+      <ParentSearch value={form.parent1Id} onChange={e=>setForm({...form,parent1Id:e.target.value})}
+        members={members.filter(m=>m.id!==sel&&(!form.birthDate||!m.birthDate||m.birthDate<form.birthDate||m.deceased))}
+        placeholder="Buscar padre..." exclude={[sel,form.parent2Id].filter(Boolean)}/>
+      <div style={{color:"rgba(60,60,67,0.6)",fontSize:12,padding:"8px 14px 0"}}>Madre</div>
+      <ParentSearch value={form.parent2Id} onChange={e=>setForm({...form,parent2Id:e.target.value})}
+        members={members.filter(m=>m.id!==sel&&(!form.birthDate||!m.birthDate||m.birthDate<form.birthDate||m.deceased))}
+        placeholder="Buscar madre..." exclude={[sel,form.parent1Id].filter(Boolean)}/>
       <SecTitle>Pareja</SecTitle>
       <Sel value={form.partnerIdNew||""} onChange={e=>setForm({...form,partnerIdNew:e.target.value})}>
         <option value="">— Ninguno —</option>
