@@ -898,31 +898,36 @@ function CalendarView({members,events,onTapPerson,onTapEvent}){
         const hit=evs.length>0;
         const memberEvs=evs.filter(e=>!e.isEvent);
         const famEvs=evs.filter(e=>e.isEvent);
-        const CellAvatar=({ev,w})=>{
+        const CellAvatar=({ev})=>{
           const mem=ev.member;
           const ini=(getDisplay(mem).full||"?").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase();
           const isF=mem.gender==="F";const isDead=mem.deceased;
           const grad=isDead?"linear-gradient(135deg,#666,#999)":(isF?"linear-gradient(135deg,#FF2D55,#FF6482)":"linear-gradient(135deg,#007AFF,#5AC8FA)");
           const src=mem.photo?(isDead?mem.photo.replace("/upload/","/upload/e_grayscale/"):mem.photo):null;
           const bdr=isDead?"2px solid #999":(isF?"2px solid #FF2D55":"2px solid #007AFF");
-          return <div style={{position:"relative",width:w,margin:"0 auto",flexShrink:0}}>
-            <div style={{width:"100%",paddingBottom:"100%",borderRadius:"50%",background:src?`url(${src}) center/cover no-repeat`:grad,border:bdr,boxSizing:"border-box",position:"relative",overflow:"hidden"}}>
+          return <><div style={{width:"100%",height:"100%",borderRadius:"50%",background:src?`url(${src}) center/cover no-repeat`:grad,border:bdr,boxSizing:"border-box",overflow:"hidden",position:"relative"}}>
               {!src&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:600,fontSize:"clamp(7px,2.5vw,13px)"}}>{ini}</div>}
             </div>
-            <span style={{position:"absolute",top:"-8%",right:"-8%",fontSize:"clamp(10px,3.5vw,18px)",lineHeight:1}}>{ev.type==="birthday"?"🎉":"🕊️"}</span>
-          </div>;
+            <span style={{position:"absolute",top:"-8%",right:"-8%",fontSize:"clamp(10px,3.5vw,18px)",lineHeight:1}}>{ev.type==="birthday"?"🎉":"🕊️"}</span></>;
         };
+        const AvatarWrap=({ev,style})=><div style={{aspectRatio:"1/1",maxWidth:"100%",position:"relative",flexShrink:0,...style}}><CellAvatar ev={ev}/></div>;
         let avatarBlock=null;
         if(memberEvs.length===1){
-          avatarBlock=<div style={{display:"flex",justifyContent:"center",alignItems:"center",flex:1}}><CellAvatar ev={memberEvs[0]} w="70%"/></div>;
+          avatarBlock=<div style={{display:"flex",justifyContent:"center",alignItems:"stretch",flex:1,overflow:"hidden",padding:1}}>
+            <AvatarWrap ev={memberEvs[0]}/>
+          </div>;
         } else if(memberEvs.length===2){
-          avatarBlock=<div style={{display:"flex",flexDirection:"column",justifyContent:"space-evenly",alignItems:"center",flex:1}}>
-            {memberEvs.map((ev,ei)=><CellAvatar key={ei} ev={ev} w="45%"/>)}
+          avatarBlock=<div style={{display:"flex",flexDirection:"column",gap:1,flex:1,overflow:"hidden"}}>
+            {memberEvs.map((ev,ei)=><div key={ei} style={{flex:1,display:"flex",justifyContent:"center",alignItems:"stretch",overflow:"hidden"}}>
+              <AvatarWrap ev={ev}/>
+            </div>)}
           </div>;
         } else if(memberEvs.length>2){
-          avatarBlock=<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:1,flex:1}}>
-            {memberEvs.slice(0,4).map((ev,ei)=><div key={ei} style={{display:"flex",justifyContent:"center",alignItems:"center"}}><CellAvatar ev={ev} w="30%"/></div>)}
-            {memberEvs.length>4&&<div style={{fontSize:"clamp(7px,1.8vw,10px)",color:"#007AFF",textAlign:"center",alignSelf:"center"}}>+{memberEvs.length-4}</div>}
+          avatarBlock=<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gridTemplateRows:"1fr 1fr",gap:1,flex:1,overflow:"hidden"}}>
+            {memberEvs.slice(0,4).map((ev,ei)=><div key={ei} style={{display:"flex",justifyContent:"center",alignItems:"stretch",overflow:"hidden"}}>
+              <AvatarWrap ev={ev}/>
+            </div>)}
+            {memberEvs.length>4&&<div style={{fontSize:"clamp(7px,1.8vw,10px)",color:"#007AFF",textAlign:"center",gridColumn:"span 2",alignSelf:"center"}}>+{memberEvs.length-4}</div>}
           </div>;
         }
         return <div key={day} onClick={hit?()=>setDaySheet(evs):undefined}
